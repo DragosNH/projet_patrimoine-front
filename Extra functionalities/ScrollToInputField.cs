@@ -6,33 +6,28 @@ using UnityEngine.EventSystems;
 public class ScrollToInputField : MonoBehaviour, ISelectHandler
 {
     public ScrollRect scrollRect;
-    public float offsetFromKeyboard = 200f; 
+    private TMP_InputField selectedInput;
 
     public void OnSelect(BaseEventData eventData)
     {
-        StartCoroutine(ScrollToSelected());
+        selectedInput = GetComponent<TMP_InputField>();
     }
 
-    private System.Collections.IEnumerator ScrollToSelected()
+    void Update()
     {
-        yield return new WaitForEndOfFrame(); 
-        yield return new WaitForSeconds(0.15f); 
+        if (TouchScreenKeyboard.visible && selectedInput != null)
+        {
+            RectTransform inputRect = selectedInput.GetComponent<RectTransform>();
+            Vector3[] corners = new Vector3[4];
+            inputRect.GetWorldCorners(corners);
+            float inputBottomY = corners[0].y;
 
-        RectTransform inputRect = GetComponent<RectTransform>();
-        RectTransform content = scrollRect.content;
-        RectTransform viewport = scrollRect.viewport;
+            float keyboardTopY = TouchScreenKeyboard.area.y;
 
-        // Convert the input field's position to viewport space
-        Vector3 worldPos = inputRect.position;
-        Vector3 localPoint = viewport.InverseTransformPoint(worldPos);
-
-        // Calculate how far to scroll above the keypad
-        float scrollY = content.anchoredPosition.y + (localPoint.y - offsetFromKeyboard);
-
-        // Stops scrolling before it goes too far
-        scrollY = Mathf.Clamp(scrollY, 0, content.sizeDelta.y);
-
-        // Apply
-        scrollRect.content.anchoredPosition = new Vector2(content.anchoredPosition.x, scrollY);
+            if (inputBottomY < keyboardTopY)
+            {
+                scrollRect.verticalNormalizedPosition = Mathf.Lerp(scrollRect.verticalNormalizedPosition, 1f, Time.deltaTime * 5f);
+            }
+        }
     }
 }
