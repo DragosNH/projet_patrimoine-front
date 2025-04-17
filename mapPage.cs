@@ -55,6 +55,10 @@
         // -- Text Color --
         public TextMeshProUGUI[] texts;
 
+        // User location mark
+        public GameObject userMarkerPrefab;
+        public GameObject UserMarkerInstance;
+
         void Start()
         {
             // Subscribe to drag finished event from MapDragHandler
@@ -88,6 +92,8 @@
 
             zoomInButton.onClick.AddListener(() => ChangeZoom(1));
             zoomOutButton.onClick.AddListener(() => ChangeZoom(-1));
+
+        StartCoroutine(StartLocationService());
     }
 
     // Called when MapDragHandler finishes dragging.
@@ -201,7 +207,7 @@
 
 
     // Load a tile texture asynchronously from OpenStreetMap.
-    IEnumerator LoadTile(int x, int y, int z, RawImage targetImage)
+        IEnumerator LoadTile(int x, int y, int z, RawImage targetImage)
         {
             string url = $"https://tile.openstreetmap.org/{z}/{x}/{y}.png";
             UnityWebRequest request = UnityWebRequestTexture.GetTexture(url);
@@ -234,6 +240,67 @@
                 Debug.LogError($"Failed to load tile {x}, {y}: {request.error}");
             }
         }
+
+        // Find User's location
+        IEnumerator StartLocationService()
+        {
+            if (!Input.location.isEnabledByUser)
+            {
+                Debug.Log("Access not permited by the user");
+                yield break;
+            }
+
+            Input.location.Start();
+
+            int maxWait = 20;
+            while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
+            {
+                yield return new WaitForSeconds(1);
+                maxWait--;
+            }
+
+            if (maxWait <= 0)
+            {
+                Debug.Log("time out");
+                yield break;
+            }
+
+            if (Input.location.status == LocationServiceStatus.Failed)
+            {
+                Debug.Log("Unable to determine the location");
+                yield break;
+            }
+            else
+            {
+                float latitude = Input.location.lastData.latitude;
+                float longitude = Input.location.lastData.longitude;
+                Debug.Log($"User Location:\nlatitude: {latitude}\nlongitude: {longitude}");
+
+            // Convert GPS to tile position
+            int userTileX = (int)(((longitude + 180.0f) / 360.0f) * Mathf.Pow(2, zoom));
+            int userTileY = (int)(((1.0f - Mathf.Log(Mathf.Tan(latitude * Mathf.Deg2Rad) + 1.0f / Mathf.Cos(latitude * Mathf.Deg2Rad)) / Mathf.PI) / 2.0f) * Mathf.Pow(2, zoom));
+
+            // Calculate offset from center tile
+            int dx = userTileX - tileX;
+                int dy = tileY - userTileY;
+
+                float tileSize = 256f;
+                float markerX = tileContainer.GetComponent<RectTransform>().rect.width / 2 + dx * tileSize;
+                float markerY = tileContainer.GetComponent<RectTransform>().rect.height / 2 + dy * tileSize;
+
+                if (UserMarkerInstance != null)
+                {
+                    Destroy(UserMarkerInstance);
+                }
+
+                UserMarkerInstance = Instantiate(userMarkerPrefab, tileContainer);
+                UserMarkerInstance.GetComponent<RectTransform>().anchoredPosition = new Vector2(markerX, markerY);
+        }
+
+            Input.location.Stop();
+
+        }
+
 
         // ---- Theme and UI Navigation Methods ----
 
