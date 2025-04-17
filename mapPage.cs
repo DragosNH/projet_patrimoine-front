@@ -11,7 +11,7 @@
         public GameObject popupMenu;
         public Toggle themeToggle;
         public PopupFader popupFader;
-        // Reference to the drag handler (on your dedicated drag panel)
+        // Reference to the drag handler
         public MapDragHandler mapDragHandler;
 
         public float horisontalNudge = -100f;
@@ -43,9 +43,6 @@
         public Button closeLogoButton;
         public Sprite lightCloseLogoButton;
         public Sprite darkCloseLogoButton;
-        public Button myProfileBtn;
-        public Sprite lightMyProfileBtn;
-        public Sprite darkMyProfileBtn;
         public Button logoutBtn;
         public Sprite lightLogoutBtn;
         public Sprite darkLogoutBtn;
@@ -91,10 +88,10 @@
 
             zoomInButton.onClick.AddListener(() => ChangeZoom(1));
             zoomOutButton.onClick.AddListener(() => ChangeZoom(-1));
-        }
+    }
 
-        // Called when MapDragHandler finishes dragging.
-        void HandleDragFinished(Vector2 finalOffset)
+    // Called when MapDragHandler finishes dragging.
+    void HandleDragFinished(Vector2 finalOffset)
         {
             // Calculate tile coordinate shifts based on snapped offset.
             int dx = Mathf.RoundToInt(-finalOffset.x / 256f);
@@ -129,6 +126,7 @@
             }
 
             LoadMapGrid(tileX, tileY, zoom);
+
         }
 
         // Create a dynamic grid that fills the tile container.
@@ -251,7 +249,6 @@
             backgroundImage.sprite = isDarkMode ? darkBackground : lightBackground;
             logoButton.GetComponent<Image>().sprite = isDarkMode ? darkLogoButton : lightLogoButton;
             closeLogoButton.GetComponent<Image>().sprite = isDarkMode ? darkCloseLogoButton : lightCloseLogoButton;
-            myProfileBtn.GetComponent<Image>().sprite = isDarkMode ? darkMyProfileBtn : lightMyProfileBtn;
             logoutBtn.GetComponent<Image>().sprite = isDarkMode ? darkLogoutBtn : lightLogoutBtn;
             returnButton.GetComponent<Image>().sprite = isDarkMode ? darkReturnButton : lightReturnButton;
             menuPopup.GetComponent<Image>().sprite = isDarkMode ? darkPopup : lightPopup;
