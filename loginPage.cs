@@ -49,7 +49,7 @@ public class LoginPage : MonoBehaviour
     public TextMeshProUGUI[] texts;
 
 
-    private string loginURL = "http://127.0.0.1:8000/api/token/";
+    private string loginURL = "http://192.168.1.123:8000/api/token/";
 
     void Start()
     {

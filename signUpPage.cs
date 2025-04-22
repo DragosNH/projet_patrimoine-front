@@ -51,10 +51,28 @@ public class SignUp : MonoBehaviour
     public TextMeshProUGUI[] texts;
 
     // --- Sign up Url ---
-    private string signupURL = "http://127.0.0.1:8000/signup/";
+    private string signupURL = "http://192.168.1.123:8000/signup/";
 
     void Start()
     {
+        Debug.Log($"[Signup] firstNameInput: {(firstNameInput == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] lastNameInput: {(lastNameInput == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] usernameInput: {(usernameInput == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] emailInput: {(emailInput == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] passwordInput: {(passwordInput == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] confirmPasswordInput: {(confirmPasswordInput == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] loadingIndicator: {(loadingIndicator == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] loadingText: {(loadingText == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] popupMenu: {(popupMenu == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] themeToggle: {(themeToggle == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] popupFader: {(popupFader == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] backgroundImage: {(backgroundImage == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] menuPopup: {(menuPopup == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] logoButton: {(logoButton == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] closeLogoButton: {(closeLogoButton == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] signUpButton: {(signUpButton == null ? "NULL" : "OK")}");
+        Debug.Log($"[Signup] texts array length: {texts?.Length}");
+
         /// Load saved theme
         ThemeManager.Instance.LoadTheme();
         themeToggle.isOn = ThemeManager.Instance.isDarkMode;
@@ -147,15 +165,18 @@ public class SignUp : MonoBehaviour
 
         loadingIndicator.SetActive(false);
 
-        if (request.result == UnityWebRequest.Result.Success)
+        if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.Log("Signup success: " + request.downloadHandler.text);
+            long code = request.responseCode;
+            string body = request.downloadHandler?.text;
+            Debug.LogError($"Signup failed → code: {code}, networkError: {request.error}, body: {body}");
             SceneManager.LoadScene("Login");
         }
         else
         {
-            Debug.LogError("Signup failed: " + request.downloadHandler.text);
+            Debug.Log($"Signup succeeded: {request.downloadHandler.text}");
         }
+
     }
 
     [System.Serializable]
