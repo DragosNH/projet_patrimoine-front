@@ -5,7 +5,7 @@ using System.Collections;
 
 public class MapDragHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
 {
-    // The container that holds your tiles (set this in the Inspector)
+    // The container that holds the tiles 
     public Transform tileContainer;
 
     // Control variables
