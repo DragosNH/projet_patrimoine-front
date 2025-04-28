@@ -5,12 +5,13 @@ using System.Collections;
 using UnityEngine.UI;
 using TMPro;
 using Unity.VisualScripting;
+using UnityEngine.XR.ARSubsystems;
 
 
 public class ForgotPassword: MonoBehaviour
 {
     // --- Declared Variables ---
-    //public TMP_InputField emailInput; -- I will need this one latter
+    public TMP_InputField emailInput;
     public GameObject popupMenu;
     public Toggle themeToggle;
     public PopupFader popupFader;
@@ -114,8 +115,38 @@ public class ForgotPassword: MonoBehaviour
 
     public void SendBtn()
     {
-        // Send information
-        Debug.Log("Button clicked!");
+        StartCoroutine(SendResetRequest());
+    }
+
+    private IEnumerator SendResetRequest()
+    {
+        string email = emailInput.text.Trim();
+
+        if (string.IsNullOrEmpty(email))
+        {
+            Debug.LogWarning("Email field is empty!");
+            yield break;
+        }
+
+        WWWForm form = new WWWForm();
+        form.AddField("email", email);
+
+        using (UnityWebRequest www = UnityWebRequest.Post("http://192.168.1.123/api/password-reset/", form))
+        {
+            www.SetRequestHeader("Accept", "application/json");
+
+            yield return www.SendWebRequest();
+
+            if (www.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("Password reset email sent successfully!");
+            }
+            else
+            {
+                Debug.LogError($"Password reset failed: {www.error}");
+                Debug.LogError(www.downloadHandler.text);
+            }
+        }
     }
 
     public void Rerurn()
