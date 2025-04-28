@@ -149,6 +149,10 @@ public class ForgotPassword: MonoBehaviour
             if (www.result == UnityWebRequest.Result.Success)
             {
                 Debug.Log("Password reset email sent successfully!");
+
+                yield return new WaitForSeconds(3f);
+
+                UnityEngine.SceneManagement.SceneManager.LoadScene("SuccsessResetScene");
             }
             else
             {
