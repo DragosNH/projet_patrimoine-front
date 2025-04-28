@@ -136,7 +136,7 @@ public class MainPage: MonoBehaviour
     // ---- Go to camera ----
     public void CameraScene()
     {
-        //SceneManager.LoadScene("");
+        SceneManager.LoadScene("ARCameraScene");
     }
 
     // ---- Go to the map ----
