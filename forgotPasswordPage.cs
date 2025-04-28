@@ -128,11 +128,20 @@ public class ForgotPassword: MonoBehaviour
             yield break;
         }
 
-        WWWForm form = new WWWForm();
-        form.AddField("email", email);
-
-        using (UnityWebRequest www = UnityWebRequest.Post("http://192.168.1.123/api/password-reset/", form))
+        if (emailInput == null)
         {
+            Debug.LogError("emailInput is not assigned!");
+            yield break;
+        }
+
+        string jsonData = JsonUtility.ToJson(new EmailForm { email = email });
+
+        using (UnityWebRequest www = new UnityWebRequest("http://192.168.1.123/api/password-reset/", "POST"))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
+            www.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            www.downloadHandler = new DownloadHandlerBuffer();
+            www.SetRequestHeader("Content-Type", "application/json");
             www.SetRequestHeader("Accept", "application/json");
 
             yield return www.SendWebRequest();
@@ -148,6 +157,13 @@ public class ForgotPassword: MonoBehaviour
             }
         }
     }
+
+    [System.Serializable]
+    public class EmailForm
+    {
+        public string email;
+    }
+
 
     public void Rerurn()
     {
