@@ -61,6 +61,7 @@ public class cameraPage : MonoBehaviour
     void Update()
     {
         DetectSwipe();
+        Debug.Log("****************** ARSession.state: " + ARSession.state);
     }
 
     void DetectSwipe()
