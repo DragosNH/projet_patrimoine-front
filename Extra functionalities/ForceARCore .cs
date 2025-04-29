@@ -24,7 +24,7 @@ public class ForceARCore : MonoBehaviour
         if (ARSession.state == ARSessionState.Ready)
         {
             Debug.Log("Starting AR Session manually.");
-            var arSession = FindObjectOfType<ARSession>();
+            var arSession = Object.FindFirstObjectByType<ARSession>();
             if (arSession != null)
             {
                 arSession.enabled = true;
