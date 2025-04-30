@@ -48,6 +48,8 @@ public class ForgotPassword: MonoBehaviour
     // -- text colors --
     public TextMeshProUGUI[] texts;
 
+    // -- Url --
+    string apiUrl = NetworkConfig.ServerIP + "/api/password-reset/";
 
     void Start()
     {
@@ -136,7 +138,7 @@ public class ForgotPassword: MonoBehaviour
 
         string jsonData = JsonUtility.ToJson(new EmailForm { email = email });
 
-        using (UnityWebRequest www = new UnityWebRequest("http://192.168.1.123/api/password-reset/", "POST"))
+        using (UnityWebRequest www = new UnityWebRequest(apiUrl, "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
             www.uploadHandler = new UploadHandlerRaw(bodyRaw);

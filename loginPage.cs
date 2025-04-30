@@ -48,8 +48,7 @@ public class LoginPage : MonoBehaviour
     // -- text colors --
     public TextMeshProUGUI[] texts;
 
-
-    //private string loginURL = "http://192.168.1.123/api/login/";
+    // -- Url --
     string apiUrl = NetworkConfig.ServerIP + "/api/login/";
 
     void Start()

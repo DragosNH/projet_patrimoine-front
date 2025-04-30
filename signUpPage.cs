@@ -51,7 +51,7 @@ public class SignUp : MonoBehaviour
     public TextMeshProUGUI[] texts;
 
     // --- Sign up Url ---
-    private string signupURL = "http://192.168.1.123/api/signup/";
+    string apiUrl = NetworkConfig.ServerIP + "/api/signup/";
 
     void Start()
     {
@@ -138,7 +138,7 @@ public class SignUp : MonoBehaviour
             confirm_password = confirmPasswordInput.text
         });
 
-        UnityWebRequest request = new UnityWebRequest(signupURL, "POST");
+        UnityWebRequest request = new UnityWebRequest(apiURL, "POST");
         byte[] jsonToSend = new System.Text.UTF8Encoding().GetBytes(jsonData);
         request.uploadHandler = new UploadHandlerRaw(jsonToSend);
         request.downloadHandler = new DownloadHandlerBuffer();
