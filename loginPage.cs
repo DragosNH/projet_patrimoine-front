@@ -49,7 +49,8 @@ public class LoginPage : MonoBehaviour
     public TextMeshProUGUI[] texts;
 
 
-    private string loginURL = "http://192.168.1.123/api/login/";
+    //private string loginURL = "http://192.168.1.123/api/login/";
+    string apiUrl = NetworkConfig.ServerIP + "/api/login/";
 
     void Start()
     {
@@ -130,7 +131,7 @@ public class LoginPage : MonoBehaviour
 
         string jsonData = JsonUtility.ToJson(loginData);
 
-        UnityWebRequest request = new UnityWebRequest(loginURL, "POST");
+        UnityWebRequest request = new UnityWebRequest(apiUrl, "POST");
         byte[] jsonToSend = new System.Text.UTF8Encoding().GetBytes(jsonData);
         request.uploadHandler = new UploadHandlerRaw(jsonToSend);
         request.downloadHandler = new DownloadHandlerBuffer();
