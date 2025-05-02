@@ -14,9 +14,14 @@ public class cameraPage : MonoBehaviour
     private Vector2 startTouchPosition;
     private Vector2 endTouchPosition;
     private bool isSwiping = false;
+    public TMP_Text debugTxt;
+    public bool planeTouched;
 
     IEnumerator Start()
     {
+
+        Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
         if ((ARSession.state == ARSessionState.None) ||
             (ARSession.state == ARSessionState.CheckingAvailability))
         {
@@ -61,7 +66,16 @@ public class cameraPage : MonoBehaviour
     void Update()
     {
         DetectSwipe();
-        Debug.Log("****************** ARSession.state: " + ARSession.state);
+
+        if (Input.touchCount > 0)
+        {
+            for(int i = 0; i < Input.touchCount; i++)
+            {
+                Touch touch = Input.GetTouch(i);
+                debugTxt.text = $"Position: {touch.position}";
+            }
+        }
+
     }
 
     void DetectSwipe()
@@ -93,7 +107,7 @@ public class cameraPage : MonoBehaviour
         float swipeDistanceX = endTouchPosition.x - startTouchPosition.x;
         Debug.Log("Swipe Distance X: " + swipeDistanceX);
 
-        if (Mathf.Abs(swipeDistanceX) > 50f)
+        if (Mathf.Abs(swipeDistanceX) > 100f)
         {
             if (swipeDistanceX > 0)
             {

@@ -138,7 +138,7 @@ public class SignUp : MonoBehaviour
             confirm_password = confirmPasswordInput.text
         });
 
-        UnityWebRequest request = new UnityWebRequest(apiURL, "POST");
+        UnityWebRequest request = new UnityWebRequest(apiUrl, "POST");
         byte[] jsonToSend = new System.Text.UTF8Encoding().GetBytes(jsonData);
         request.uploadHandler = new UploadHandlerRaw(jsonToSend);
         request.downloadHandler = new DownloadHandlerBuffer();
