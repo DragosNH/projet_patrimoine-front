@@ -119,7 +119,7 @@ public class cameraPage : MonoBehaviour
             referenceLon = Input.location.lastData.longitude;
 
             // ▼ Acttual coordonates are not accurate ▼
-            Vector3 position = GPSLocationToUnityPosition(47.73200138526153, 7.286370112966); // <-- GPS coordonates
+            Vector3 position = GPSLocationToUnityPosition(47.732076586274566, 7.286111556172447); // <-- GPS coordonates
             gameObject = Instantiate(gameObject, position, Quaternion.identity);
             createdGameObject = true;
         }
@@ -168,8 +168,8 @@ public class cameraPage : MonoBehaviour
         currLoc.lat = Input.location.lastData.latitude;
         currLoc.lon = Input.location.lastData.longitude;
 
-        // 47.73200138526153, 7.286370112966
-        double distanceBetween = Distance((double)currLoc.lat, (double)47.73200138526153, (double)startLoc.lat, (double)7.286370112966, 'K'); // <-- For the moment the coordonates are not accurate
+        // 47.732076586274566, 7.286111556172447
+        double distanceBetween = Distance((double)currLoc.lat, (double)47.732076586274566, (double)startLoc.lat, (double)7.286111556172447, 'K'); // <-- For the moment the coordonates are not accurate
 
         debugTxt.text += "\nDisatance: " + distanceBetween;
 
