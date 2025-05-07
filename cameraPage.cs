@@ -1,14 +1,14 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
-using UnityEngine.Networking;
-using UnityEngine.SceneManagement;
-using UnityEngine.XR.ARFoundation;
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using TMPro;
 using Unity.VisualScripting;
-using System.Runtime.CompilerServices;
+using UnityEngine;
+using UnityEngine.Networking;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using UnityEngine.XR.ARFoundation;
 
 
 public class CameraPage : MonoBehaviour
