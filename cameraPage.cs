@@ -11,7 +11,7 @@ using Unity.VisualScripting;
 using System.Runtime.CompilerServices;
 
 
-public class cameraPage : MonoBehaviour
+public class CameraPage : MonoBehaviour
 {
     [SerializeField] ARSession m_Session;
 
@@ -22,7 +22,8 @@ public class cameraPage : MonoBehaviour
     public bool planeTouched;
 
     // ------ Object position variables ------
-    public GameObject gameObject;
+    public GameObject objectPrefab;
+    private GameObject spawnedObject;
     bool createdGameObject = false;
 
     private char unit = 'K';
@@ -122,7 +123,7 @@ public class cameraPage : MonoBehaviour
 
             // ▼ Acttual coordonates are not accurate ▼
             Vector3 position = GPSLocationToUnityPosition(47.732076586274566, 7.286111556172447); // <-- GPS coordonates
-            gameObject = Instantiate(gameObject, position, Quaternion.identity);
+            GameObject spawnedObject = Instantiate(objectPrefab, position, Quaternion.identity);
             createdGameObject = true;
         }
 
@@ -149,38 +150,39 @@ public class cameraPage : MonoBehaviour
 
     void Update()
     {
-        // Detect swipe in order to return to the privious screen
         DetectSwipe();
+
+        string display = "";
 
         if (Input.touchCount > 0)
         {
-            for(int i = 0; i < Input.touchCount; i++)
+            for (int i = 0; i < Input.touchCount; i++)
             {
                 Touch touch = Input.GetTouch(i);
-                debugTxt.text = $"Position: {touch.position}";
+                display += $"Position: {touch.position}\n";
             }
         }
 
-        // Get licalisation and display AR Object to the specific location
         if (gps_ok)
         {
-            debugTxt.text = "GPS: Working";
+            display += "GPS: Working\n";
+
+            currLoc.lat = Input.location.lastData.latitude;
+            currLoc.lon = Input.location.lastData.longitude;
+
+            double distanceBetween = Distance(currLoc.lat, currLoc.lon, 47.732076586274566, 7.286111556172447, 'K');
+
+            display += $"Distance: {distanceBetween}\n";
+
+            if (distanceBetween <= 0.01)
+            {
+                display += "L'objet est dans le coin";
+            }
         }
 
-        currLoc.lat = Input.location.lastData.latitude;
-        currLoc.lon = Input.location.lastData.longitude;
-
-        // 47.732076586274566, 7.286111556172447
-        double distanceBetween = Distance((double)currLoc.lat, (double)47.732076586274566, (double)startLoc.lat, (double)7.286111556172447, 'K'); // <-- For the moment the coordonates are not accurate
-
-        debugTxt.text += "\nDisatance: " + distanceBetween;
-
-        if(distanceBetween <= 0.01)
-        {
-            debugTxt.text += "l'Objet est dans le coin";
-        }
-
+        debugTxt.text = display;
     }
+
 
 
     // ---------------- Detect the swipe of the user on the camera scene ---------------

@@ -70,6 +70,7 @@ public class ProfileScecne: MonoBehaviour
     // -- text colors --
     public TextMeshProUGUI[] texts;
 
+    // -- Url --
     string apiUrl = NetworkConfig.ServerIP + "/api/profile/";
 
     void Start()
