@@ -52,6 +52,7 @@ public class cameraPage : MonoBehaviour
         if (ARSession.state == ARSessionState.Unsupported)
         {
             Debug.LogWarning("Your device is not supported for the AR!!!!!");
+            debugTxt.text = "Votre appareil n'est pas compatible avec la réalité augmentée.";
         }
         else
         {
@@ -62,6 +63,7 @@ public class cameraPage : MonoBehaviour
         if (ARSession.state == ARSessionState.NeedsInstall)
         {
             Debug.Log("You need to install the AR in order for it to work");
+            debugTxt.text = "\nVous devez installer le module de réalité augmentée depuis le Play Store.";
         }
 
         // ---------------- Location messages ----------------

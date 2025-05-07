@@ -70,6 +70,8 @@ public class ProfileScecne: MonoBehaviour
     // -- text colors --
     public TextMeshProUGUI[] texts;
 
+    string apiUrl = NetworkConfig.ServerIP + "/api/profile/";
+
     void Start()
     {
         StartCoroutine(GetUserProfile());
@@ -152,7 +154,7 @@ public class ProfileScecne: MonoBehaviour
             yield break;
         }
 
-        UnityWebRequest request = UnityWebRequest.Get("http://127.0.0.1:8000/api/profile/");
+        UnityWebRequest request = UnityWebRequest.Get(apiUrl);
         request.SetRequestHeader("Authorization", "Bearer " + token);
 
         yield return request.SendWebRequest();
