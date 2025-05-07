@@ -24,16 +24,11 @@ public class CameraPage : MonoBehaviour
     // ------ Object position variables ------
     public GameObject objectPrefab;
     private GameObject spawnedObject;
-    bool createdGameObject = false;
 
-    private char unit = 'K';
     public bool gps_ok = false;
-    float PI = Mathf.PI;
 
     GPSLoc startLoc = new GPSLoc();
     GPSLoc currLoc = new GPSLoc();
-
-    bool measureDistance = false;
 
     private double referenceLat;
     private double referenceLon;
@@ -124,7 +119,6 @@ public class CameraPage : MonoBehaviour
             // ▼ Acttual coordonates are not accurate ▼
             Vector3 position = GPSLocationToUnityPosition(47.732076586274566, 7.286111556172447); // <-- GPS coordonates
             GameObject spawnedObject = Instantiate(objectPrefab, position, Quaternion.identity);
-            createdGameObject = true;
         }
 
     }
@@ -251,7 +245,6 @@ public class CameraPage : MonoBehaviour
     public void StoreCurrentGPS()
     {
         startLoc = new GPSLoc(currLoc.lon, currLoc.lat);
-        measureDistance = true;
     }
 
     private double Distance(double lat1, double lon1, double lat2, double lon2, char unit)
