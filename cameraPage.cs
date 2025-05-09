@@ -125,7 +125,6 @@ public class CameraPage : MonoBehaviour
             referenceAltitude = Input.location.lastData.altitude;
 
 
-            // ▼ Acttual coordonates are not accurate ▼
             List<ARRaycastHit> hits = new List<ARRaycastHit>();
             Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
 
@@ -176,7 +175,9 @@ public class CameraPage : MonoBehaviour
             currLoc.lat = Input.location.lastData.latitude;
             currLoc.lon = Input.location.lastData.longitude;
 
-            double distanceBetween = Distance(currLoc.lat, currLoc.lon, 47.732076586274566, 7.286111556172447, 'K');
+            // ▼▼ Coordonates that need to change ▼▼
+            // 47.73210898241744, 7.286019618830404
+            double distanceBetween = Distance(currLoc.lat, currLoc.lon, 47.73210898241744, 7.286019618830404, 'K');
 
             display += $"Distance: {distanceBetween}\n";
 
@@ -308,10 +309,24 @@ public class CameraPage : MonoBehaviour
 
             if (raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
             {
-                Pose hitPose = hits[0].pose;
-                spawnedObject = Instantiate(objectPrefab, hitPose.position, hitPose.rotation);
-                objectPlaced = true;
-                Debug.Log("Object placed on detected AR plane.");
+                currLoc.lat = Input.location.lastData.latitude;
+                currLoc.lon = Input.location.lastData.longitude;
+
+                // 47.73210898241744, 7.286019618830404
+                double distanceToTarget = Distance(currLoc.lat, currLoc.lon, 47.73210898241744, 7.286019618830404, 'K');
+
+                if(distanceToTarget <= 0.02)
+                {
+                    Pose hitPose = hits[0].pose;
+                    spawnedObject = Instantiate(objectPrefab, hitPose.position, hitPose.rotation);
+                    objectPlaced = true;
+                    debugTxt.text = "Bâtiment chargé à l’emplacement du parking.";
+                    Debug.Log("Model placed at parking lot.");
+                }
+                else
+                {
+                    debugTxt.text = "Déplacez-vous vers le parking pour voir le bâtiment.";
+                }
             }
 
             yield return new WaitForSeconds(0.5f);
