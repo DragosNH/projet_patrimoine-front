@@ -9,17 +9,22 @@ using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
+
 
 
 public class CameraPage : MonoBehaviour
 {
     [SerializeField] ARSession m_Session;
+    [SerializeField] private ARRaycastManager raycastManager;
+
 
     private Vector2 startTouchPosition;
     private Vector2 endTouchPosition;
     private bool isSwiping = false;
     public TMP_Text debugTxt;
     public bool planeTouched;
+    private bool objectPlaced = false;
 
     // ------ Object position variables ------
     public GameObject objectPrefab;
@@ -32,6 +37,8 @@ public class CameraPage : MonoBehaviour
 
     private double referenceLat;
     private double referenceLon;
+    private double referenceAltitude;
+
 
     IEnumerator Start()
     {
@@ -115,10 +122,15 @@ public class CameraPage : MonoBehaviour
 
             referenceLat = Input.location.lastData.latitude;
             referenceLon = Input.location.lastData.longitude;
+            referenceAltitude = Input.location.lastData.altitude;
+
 
             // ▼ Acttual coordonates are not accurate ▼
-            Vector3 position = GPSLocationToUnityPosition(47.732076586274566, 7.286111556172447); // <-- GPS coordonates
-            GameObject spawnedObject = Instantiate(objectPrefab, position, Quaternion.identity);
+            List<ARRaycastHit> hits = new List<ARRaycastHit>();
+            Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
+
+            StartCoroutine(TryPlaceObjectWhenPlaneFound());
+
         }
 
     }
@@ -227,14 +239,15 @@ public class CameraPage : MonoBehaviour
 
     // ---------------- GPS Localisation ----------------
 
-    private Vector3 GPSLocationToUnityPosition(double targetLat, double targetLon)
+    private Vector3 GPSLocationToUnityPosition(double targetLat, double targetLon, double targetAlt)
     {
         float scale = 111320f;
 
         float x = (float)((targetLon - referenceLon) * scale);
+        float y = (float)(targetAlt - referenceAltitude);
         float z = (float)((targetLat - referenceLat) * scale);
 
-        return new Vector3(x, 0f, z);
+        return new Vector3(x, y, z);
     }
 
     public void StopGps()
@@ -281,6 +294,30 @@ public class CameraPage : MonoBehaviour
     private double rad2deg(double rad)
     {
         return (rad / Math.PI * 180.0);
+    }
+
+    private IEnumerator TryPlaceObjectWhenPlaneFound()
+    {
+        List<ARRaycastHit> hits = new List<ARRaycastHit>();
+        Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
+
+        while (!objectPlaced)
+        {
+
+            debugTxt.text = "Recherche d’un plan AR pour placer l’objet...";
+
+            if (raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
+            {
+                Pose hitPose = hits[0].pose;
+                spawnedObject = Instantiate(objectPrefab, hitPose.position, hitPose.rotation);
+                objectPlaced = true;
+                Debug.Log("Object placed on detected AR plane.");
+            }
+
+            yield return new WaitForSeconds(0.5f);
+
+        }
+
     }
 
 }
