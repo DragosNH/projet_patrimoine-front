@@ -23,7 +23,6 @@ public class CameraPage : MonoBehaviour
     private Vector2 endTouchPosition;
     private bool isSwiping = false;
     public TMP_Text debugTxt;
-    public bool planeTouched;
     private bool objectPlaced = false;
 
     // ------ Object position variables ------
@@ -134,20 +133,7 @@ public class CameraPage : MonoBehaviour
 
     }
 
-    // Check the XR Status
-    public void CheckXRStatus()
-    {
-        if(UnityEngine.XR.XRSettings.enabled)
-        {
-            Debug.Log("------ XR is active. ------");
-        }
-        else
-        {
-            Debug.Log("------ XR is not available. ------");
-        }
-    }
-
-    // return to main page
+    // -------- return to main page --------
     public void Return()
     {
         SceneManager.LoadScene("MainPage");
@@ -158,15 +144,6 @@ public class CameraPage : MonoBehaviour
         DetectSwipe();
 
         string display = "";
-
-        if (Input.touchCount > 0)
-        {
-            for (int i = 0; i < Input.touchCount; i++)
-            {
-                Touch touch = Input.GetTouch(i);
-                display += $"Position: {touch.position}\n";
-            }
-        }
 
         if (gps_ok)
         {
@@ -237,6 +214,8 @@ public class CameraPage : MonoBehaviour
 
 
     // ---------------- End of swipe dection ----------------
+
+
 
     // ---------------- GPS Localisation ----------------
 
@@ -313,6 +292,7 @@ public class CameraPage : MonoBehaviour
                 currLoc.lon = Input.location.lastData.longitude;
 
                 // 47.73210898241744, 7.286019618830404
+                // ▼▼ Add longitude and latitude here ▼▼
                 double distanceToTarget = Distance(currLoc.lat, currLoc.lon, 47.73210898241744, 7.286019618830404, 'K');
 
                 if(distanceToTarget <= 0.02)
