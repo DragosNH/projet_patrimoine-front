@@ -17,6 +17,7 @@ public class CameraPage : MonoBehaviour
 {
     [SerializeField] ARSession m_Session;
     [SerializeField] private ARRaycastManager raycastManager;
+    [SerializeField] ARAnchorManager anchorManager;
 
 
     private Vector2 startTouchPosition;
@@ -144,45 +145,51 @@ public class CameraPage : MonoBehaviour
         if (!gps_ok || objectPlaced)
             return;
 
-        // ------ Check distance ------
+        // Compute flat-earth distance in meters
         double currLat = Input.location.lastData.latitude;
         double currLon = Input.location.lastData.longitude;
-
-        double targetLat = parkingLatitude;
-        double targetLon = parkingLongitude;
-        const double thresholdKm = 0.02;
-
-        double distanceToTarget = Distance(currLat, currLon, targetLat, targetLon, 'K');
-        if (distanceToTarget > thresholdKm)
+        double dLat = parkingLatitude - currLat;
+        double dLon = parkingLongitude - currLon;
+        double latRad = currLat * Mathf.Deg2Rad;
+        float northMeters = (float)(dLat * 110540f);
+        float eastMeters = (float)(dLon * 111320f * Math.Cos(latRad));
+        float distance = Mathf.Sqrt(northMeters * northMeters + eastMeters * eastMeters);
+        if (distance > 20f)  
             return;
 
-        // ------ AR raycast ------
+        // Raycast once from screen center
         var hits = new List<ARRaycastHit>();
         var screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
         if (!raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
             return;
 
-        referenceLat = currLat;
-        referenceLon = currLon;
-        referenceAltitude = Input.location.lastData.altitude;
-        double latRad = referenceLat * Mathf.Deg2Rad;
-        Vector3 offset = new Vector3(
-            (float)((targetLon - referenceLon) * 111320 * Math.Cos(latRad)),
-            0f,
-            (float)((targetLat - referenceLat) * 110540)
-        );
+        // Build geo-offset and rotate into world-space
+        Pose planePose = hits[0].pose;
+        Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
+        Vector3 worldOffset = planePose.rotation * geoOffset;
 
-        Pose hitPose = hits[0].pose;
-        Vector3 spawnPos = hitPose.position + offset;
-        spawnedObject = Instantiate(objectPrefab, spawnPos, hitPose.rotation);
+        // Anchor and instantiate for rock-solid placement
+        Vector3 spawnPos = planePose.position + worldOffset;
 
+        // Create a new GameObject to hold the ARAnchor
+        GameObject anchorGO = new GameObject("ARAnchor");
+        // Position & rotation
+        anchorGO.transform.position = spawnPos;
+        anchorGO.transform.rotation = planePose.rotation;
+        
+        ARAnchor anchor = anchorGO.AddComponent<ARAnchor>();
+
+        // Parent your spawned object under the anchor
+        spawnedObject = Instantiate(objectPrefab, anchorGO.transform);
+
+        
         objectPlaced = true;
         debugTxt.text = "Bâtiment chargé à l’emplacement du parking.";
         Debug.Log("Model placed at parking lot.");
 
         raycastManager.enabled = false;
+        anchorManager.enabled = false;
         enabled = false;
-
     }
 
     private void UpdateDebugDisplay()
@@ -241,14 +248,11 @@ public class CameraPage : MonoBehaviour
             }
         }
     }
-
-
     // ---------------- End of swipe dection ----------------
 
 
 
     // ---------------- GPS Localisation ----------------
-
     private Vector3 GPSLocationToUnityPosition(double targetLat, double targetLon, double targetAlt)
     {
         double latRad = referenceLat * Mathf.Deg2Rad;
