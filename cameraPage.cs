@@ -118,18 +118,17 @@ public class CameraPage : MonoBehaviour
 
             gps_ok = true;
 
-
             referenceLat = Input.location.lastData.latitude;
             referenceLon = Input.location.lastData.longitude;
             referenceAltitude = Input.location.lastData.altitude;
 
-
             List<ARRaycastHit> hits = new List<ARRaycastHit>();
             Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
 
-            StartCoroutine(TryPlaceObjectWhenPlaneFound());
 
         }
+        
+        TryPlaceObjectWhenPlaneFound();
 
     }
 
@@ -154,7 +153,8 @@ public class CameraPage : MonoBehaviour
 
             // ▼▼ Coordonates that need to change ▼▼
             // 47.73210898241744, 7.286019618830404
-            double distanceBetween = Distance(currLoc.lat, currLoc.lon, 47.73210898241744, 7.286019618830404, 'K');
+            // 47.73195037653758, 7.286921597089104 - test
+            double distanceBetween = Distance(currLoc.lat, currLoc.lon, 47.73195037653758, 7.286921597089104, 'K');
 
             display += $"Distance: {distanceBetween}\n";
 
@@ -199,7 +199,7 @@ public class CameraPage : MonoBehaviour
         float swipeDistanceX = endTouchPosition.x - startTouchPosition.x;
         Debug.Log("Swipe Distance X: " + swipeDistanceX);
 
-        if (Mathf.Abs(swipeDistanceX) > 100f)
+        if (Mathf.Abs(swipeDistanceX) > 150f)
         {
             if (swipeDistanceX > 0)
             {
@@ -221,13 +221,10 @@ public class CameraPage : MonoBehaviour
 
     private Vector3 GPSLocationToUnityPosition(double targetLat, double targetLon, double targetAlt)
     {
-        float scale = 111320f;
-
-        float x = (float)((targetLon - referenceLon) * scale);
-        float y = (float)(targetAlt - referenceAltitude);
-        float z = (float)((targetLat - referenceLat) * scale);
-
-        return new Vector3(x, y, z);
+        double latRad = referenceLat * Mathf.Deg2Rad;
+        float x = (float)((targetLon - referenceLon) * 111320 * Math.Cos(latRad));
+        float z = (float)((targetLat - referenceLat) * 110540);
+        return new Vector3(x, 0, z);
     }
 
     public void StopGps()
@@ -276,43 +273,48 @@ public class CameraPage : MonoBehaviour
         return (rad / Math.PI * 180.0);
     }
 
-    private IEnumerator TryPlaceObjectWhenPlaneFound()
+    
+
+    private void TryPlaceObjectWhenPlaneFound()
     {
-        List<ARRaycastHit> hits = new List<ARRaycastHit>();
-        Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
+        if (!gps_ok || objectPlaced) return;
 
-        while (!objectPlaced)
-        {
+        var hits = new List<ARRaycastHit>();
+        var screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
+        if (!raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
+            return;
 
-            debugTxt.text = "Recherche d’un plan AR pour placer l’objet...";
+        double currLat = Input.location.lastData.latitude;
+        double currLon = Input.location.lastData.longitude;
+        double distanceToTarget = Distance(
+            currLat, currLon,
+            47.73195037653758, 7.286921597089104,
+            'K'
+        );
 
-            if (raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
-            {
-                currLoc.lat = Input.location.lastData.latitude;
-                currLoc.lon = Input.location.lastData.longitude;
+        const double thresholdKm = 0.02;
+        if (distanceToTarget > thresholdKm)
+            return;
 
-                // 47.73210898241744, 7.286019618830404
-                // ▼▼ Add longitude and latitude here ▼▼
-                double distanceToTarget = Distance(currLoc.lat, currLoc.lon, 47.73210898241744, 7.286019618830404, 'K');
+        referenceLat = currLat;
+        referenceLon = currLon;
+        referenceAltitude = Input.location.lastData.altitude;
 
-                if(distanceToTarget <= 0.02)
-                {
-                    Pose hitPose = hits[0].pose;
-                    spawnedObject = Instantiate(objectPrefab, hitPose.position, hitPose.rotation);
-                    objectPlaced = true;
-                    debugTxt.text = "Bâtiment chargé à l’emplacement du parking.";
-                    Debug.Log("Model placed at parking lot.");
-                }
-                else
-                {
-                    debugTxt.text = "Déplacez-vous vers le parking pour voir le bâtiment.";
-                }
-            }
+        Vector3 offset = GPSLocationToUnityPosition(
+            47.73195037653758,
+            7.286921597089104,
+            referenceAltitude
+        );
 
-            yield return new WaitForSeconds(0.5f);
+        Pose hitPose = hits[0].pose;
+        Vector3 spawnPos = hitPose.position + new Vector3(offset.x, 0f, offset.z);
 
-        }
+        spawnedObject = Instantiate(objectPrefab, spawnPos, hitPose.rotation);
+        objectPlaced = true;
+        debugTxt.text = "Bâtiment chargé à l’emplacement du parking.";
+        Debug.Log("Model placed at parking lot.");
 
+        this.enabled = false;
     }
 
 }
