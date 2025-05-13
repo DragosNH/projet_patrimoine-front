@@ -38,6 +38,10 @@ public class CameraPage : MonoBehaviour
     private double referenceLon;
     private double referenceAltitude;
 
+    // 47.732092007376586, 7.286084665077947
+    public double parkingLatitude = 47.732092007376586;
+    public double parkingLongitude = 7.286084665077947;
+
 
     IEnumerator Start()
     {
@@ -122,14 +126,8 @@ public class CameraPage : MonoBehaviour
             referenceLon = Input.location.lastData.longitude;
             referenceAltitude = Input.location.lastData.altitude;
 
-            List<ARRaycastHit> hits = new List<ARRaycastHit>();
-            Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
-
-
         }
         
-        TryPlaceObjectWhenPlaneFound();
-
     }
 
     // -------- return to main page --------
@@ -141,32 +139,64 @@ public class CameraPage : MonoBehaviour
     void Update()
     {
         DetectSwipe();
+        UpdateDebugDisplay();
 
-        string display = "";
+        if (!gps_ok || objectPlaced)
+            return;
 
-        if (gps_ok)
-        {
-            display += "GPS: Working\n";
+        // ------ Check distance ------
+        double currLat = Input.location.lastData.latitude;
+        double currLon = Input.location.lastData.longitude;
 
-            currLoc.lat = Input.location.lastData.latitude;
-            currLoc.lon = Input.location.lastData.longitude;
+        double targetLat = parkingLatitude;
+        double targetLon = parkingLongitude;
+        const double thresholdKm = 0.02;
 
-            // ▼▼ Coordonates that need to change ▼▼
-            // 47.73210898241744, 7.286019618830404
-            // 47.73195037653758, 7.286921597089104 - test
-            double distanceBetween = Distance(currLoc.lat, currLoc.lon, 47.73195037653758, 7.286921597089104, 'K');
+        double distanceToTarget = Distance(currLat, currLon, targetLat, targetLon, 'K');
+        if (distanceToTarget > thresholdKm)
+            return;
 
-            display += $"Distance: {distanceBetween}\n";
+        // ------ AR raycast ------
+        var hits = new List<ARRaycastHit>();
+        var screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
+        if (!raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
+            return;
 
-            if (distanceBetween <= 0.01)
-            {
-                display += "L'objet est dans le coin";
-            }
-        }
+        referenceLat = currLat;
+        referenceLon = currLon;
+        referenceAltitude = Input.location.lastData.altitude;
+        double latRad = referenceLat * Mathf.Deg2Rad;
+        Vector3 offset = new Vector3(
+            (float)((targetLon - referenceLon) * 111320 * Math.Cos(latRad)),
+            0f,
+            (float)((targetLat - referenceLat) * 110540)
+        );
 
-        debugTxt.text = display;
+        Pose hitPose = hits[0].pose;
+        Vector3 spawnPos = hitPose.position + offset;
+        spawnedObject = Instantiate(objectPrefab, spawnPos, hitPose.rotation);
+
+        objectPlaced = true;
+        debugTxt.text = "Bâtiment chargé à l’emplacement du parking.";
+        Debug.Log("Model placed at parking lot.");
+
+        raycastManager.enabled = false;
+        enabled = false;
+
     }
 
+    private void UpdateDebugDisplay()
+    {
+        if (!gps_ok) return;
+        double currLat = Input.location.lastData.latitude;
+        double currLon = Input.location.lastData.longitude;
+        double targetLat = parkingLatitude;
+        double targetLon = parkingLongitude;
+        double distance = Distance(currLat, currLon, targetLat, targetLon, 'K');
+        string s = $"GPS: Working\nDistance: {distance:F3} km\n";
+        if (distance <= 0.01) s += "L'objet est dans le coin";
+        debugTxt.text = s;
+    }
 
 
     // ---------------- Detect the swipe of the user on the camera scene ---------------
@@ -271,50 +301,6 @@ public class CameraPage : MonoBehaviour
     private double rad2deg(double rad)
     {
         return (rad / Math.PI * 180.0);
-    }
-
-    
-
-    private void TryPlaceObjectWhenPlaneFound()
-    {
-        if (!gps_ok || objectPlaced) return;
-
-        var hits = new List<ARRaycastHit>();
-        var screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
-        if (!raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
-            return;
-
-        double currLat = Input.location.lastData.latitude;
-        double currLon = Input.location.lastData.longitude;
-        double distanceToTarget = Distance(
-            currLat, currLon,
-            47.73195037653758, 7.286921597089104,
-            'K'
-        );
-
-        const double thresholdKm = 0.02;
-        if (distanceToTarget > thresholdKm)
-            return;
-
-        referenceLat = currLat;
-        referenceLon = currLon;
-        referenceAltitude = Input.location.lastData.altitude;
-
-        Vector3 offset = GPSLocationToUnityPosition(
-            47.73195037653758,
-            7.286921597089104,
-            referenceAltitude
-        );
-
-        Pose hitPose = hits[0].pose;
-        Vector3 spawnPos = hitPose.position + new Vector3(offset.x, 0f, offset.z);
-
-        spawnedObject = Instantiate(objectPrefab, spawnPos, hitPose.rotation);
-        objectPlaced = true;
-        debugTxt.text = "Bâtiment chargé à l’emplacement du parking.";
-        Debug.Log("Model placed at parking lot.");
-
-        this.enabled = false;
     }
 
 }
