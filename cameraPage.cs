@@ -10,7 +10,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
-
+using System.Linq;
 
 
 public class CameraPage : MonoBehaviour
@@ -20,17 +20,28 @@ public class CameraPage : MonoBehaviour
     [SerializeField] ARAnchorManager anchorManager;
     [SerializeField] ARPlaneManager planeManager;
 
+    [System.Serializable]
+    public class GPSPoint
+    {
+        [Header("Location of the object")]
+        public double latitude;
+        public double longitude;
 
+        [Header("Selected house")]
+        public GameObject housePrefab;
+
+        [HideInInspector] public bool placed = false;
+    }
 
     private Vector2 startTouchPosition;
     private Vector2 endTouchPosition;
     private bool isSwiping = false;
     public TMP_Text debugTxt;
     public TMP_Text calibrateTxt;
-    private bool objectPlaced = false;
+    //private bool objectPlaced = false; -- remove latter
 
     // ------ Object position variables ------
-    public GameObject objectPrefab;
+    //public GameObject objectPrefab; -- Remove latter
     private GameObject spawnedObject;
 
     public bool gps_ok = false;
@@ -43,10 +54,14 @@ public class CameraPage : MonoBehaviour
     private double referenceAltitude;
 
     // 47.732033156335284, 7.2862330808561495 -- Must change it inside unity as well !!!
-    public double parkingLatitude = 47.732033156335284;
-    public double parkingLongitude = 7.2862330808561495;
+    //public double parkingLatitude = 47.732033156335284; -- remove latter
+    //public double parkingLongitude = 7.2862330808561495; -- remove latter
+
+    [Tooltip("One entry per house: Gps coordonates + model")]
+    public List<GPSPoint> points = new List<GPSPoint>();
 
 
+    // ----------------------------- Start function -----------------------------
     IEnumerator Start()
     {
         // Keep the screen on as long as the camera scene is running
@@ -133,85 +148,89 @@ public class CameraPage : MonoBehaviour
         }
         
     }
+    // ----------------------------- en of Start function -----------------------------
 
-    // -------- return to main page --------
+
+    // ----------------------------- return to main page -----------------------------
     public void Return()
     {
         SceneManager.LoadScene("MainPage");
     }
 
+    // ----------------------------- Update function -----------------------------
     void Update()
     {
         DetectSwipe();
         UpdateDebugDisplay();
 
-        if (!gps_ok || objectPlaced)
+        if (!gps_ok)
             return;
 
-        // ------ Compute flat‐earth offset ------
-        double currLat = Input.location.lastData.latitude;
-        double currLon = Input.location.lastData.longitude;
-        double dLat = parkingLatitude - currLat;
-        double dLon = parkingLongitude - currLon;
-        double latRad = currLat * Mathf.Deg2Rad;
-        float northMeters = (float)(dLat * 110540f);
-        float eastMeters = (float)(dLon * 111320f * Math.Cos(latRad));
-        float distance = Mathf.Sqrt(northMeters * northMeters + eastMeters * eastMeters);
-        if (distance > 50f)
-            return;
-
-        // ------ Raycast ground ------
-        var hits = new List<ARRaycastHit>();
-        var screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
-        if (!raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
-            return;
-        Pose hitPose = hits[0].pose;
-
-        // ------ Geo‐offset + camera yaw ------
-        Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
-        if (Camera.main == null) { Debug.LogError("No Camera.main!"); return; }
-        float heading = Camera.main.transform.eulerAngles.y;
-        Quaternion yawRot = Quaternion.Euler(0f, heading, 0f);
-        Vector3 worldOffset = yawRot * geoOffset;
-        Vector3 spawnPos = hitPose.position + worldOffset;
-
-        // --- Vertical offest ---
-
-        double currAlt = Input.location.lastData.altitude;
-        float altitudeOffset = (float)(currAlt - referenceAltitude);
-        spawnPos.y += altitudeOffset;
-
-        // ------ Attach to that exact ARPlane ------
-        if (planeManager == null || anchorManager == null)
+        foreach (var pt in points)
         {
-            Debug.LogError("Assign both planeManager and anchorManager in the Inspector!");
-            return;
-        }
-        var trackableId = hits[0].trackableId;
-        ARPlane plane = planeManager.GetPlane(trackableId);
-        ARAnchor anchor = anchorManager.AttachAnchor(plane, new Pose(spawnPos, Quaternion.identity));
+            if (pt.placed)
+                continue;
 
-        // ------ Instantiate *only once* under that anchor (or fallback) ------
-        if (anchor == null)
-        {
-            Debug.LogWarning("AttachAnchor failed; spawning without anchor.");
-            spawnedObject = Instantiate(objectPrefab, spawnPos, Quaternion.identity);
-        }
-        else
-        {
-            spawnedObject = Instantiate(objectPrefab, anchor.transform);
-        }
+            // ------ Distance ------
+            double currLat = Input.location.lastData.latitude;
+            double currLon = Input.location.lastData.longitude;
+            double dLat = pt.latitude - currLat;
+            double dLon = pt.longitude - currLon;
+            double latRad = currLat * Mathf.Deg2Rad;
+            float north = (float)(dLat * 110540f);
+            float east = (float)(dLon * 111320f * Math.Cos(latRad));
+            float dist = Mathf.Sqrt(north * north + east * east);
+            if (dist > 50f)
+                continue;
 
-        // ------ Finalize—lock it down and hide planes ------
-        objectPlaced = true;
-        debugTxt.text = "Object chargé à l’emplacement du parking.";
-        raycastManager.enabled = false;
-        planeManager.enabled = false;
-        foreach (var p in planeManager.trackables)
-            p.gameObject.SetActive(false);
-        enabled = false;
+            // ------ AR raycast for the ground ------
+            var hits = new List<ARRaycastHit>();
+            var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
+            if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
+                continue;
+            Pose hitPose = hits[0].pose;
+
+            // ------ Geo offset + camera yaw ------
+            Vector3 geoOffset = new Vector3(east, 0f, north);
+            if(Camera.main == null) { Debug.LogError("No Camera.main"); return; }
+            float heading = Camera.main.transform.eulerAngles.y;
+            Quaternion yaw = Quaternion.Euler(0f, heading, 0f);
+            Vector3 worldOffset = yaw * geoOffset;
+            Vector3 spawnPos = hitPose.position + worldOffset;
+
+            // ------ Attacthc to the plane ------
+            ARPlane plane = planeManager.GetPlane(hits[0].trackableId);
+            ARAnchor anchor = anchorManager.AttachAnchor(plane, new Pose(spawnPos, Quaternion.identity));
+
+            // ------ Instantiate its prefab ------
+            if(anchor == null)
+            {
+                Debug.LogWarning("Anchor attach failed, fallback instantiate");
+                Instantiate(pt.housePrefab, spawnPos, Quaternion.identity);
+            }
+            else
+            {
+                Instantiate(pt.housePrefab, anchor.transform);
+            }
+
+            pt.placed = true;
+            debugTxt.text = $"Placed: {pt.latitude:F6}, {pt.longitude:F6}";
+
+            if(points.All(x => x.placed))
+            {
+                raycastManager.enabled = false;
+                planeManager.enabled = false;
+                enabled = false;
+            }
+
+            break;
+                
+        }
     }
 
+    // ----------------------------- end of Update function -----------------------------
+
+    // ----------------------------- CalibrateGround function -----------------------------
     public void CalibrateGround()
     {
         referenceAltitude = Input.location.lastData.altitude;
@@ -220,18 +239,29 @@ public class CameraPage : MonoBehaviour
     }
 
 
-
+    // ----------------------------- UpdateDebugDisplay function -----------------------------
     private void UpdateDebugDisplay()
     {
-        if (!gps_ok) return;
+        if (!gps_ok || points.Count == 0) return;
+
         double currLat = Input.location.lastData.latitude;
         double currLon = Input.location.lastData.longitude;
-        double targetLat = parkingLatitude;
-        double targetLon = parkingLongitude;
-        double distance = Distance(currLat, currLon, targetLat, targetLon, 'K');
-        string s = $"GPS: Working\nDistance: {distance:F3} km\n";
-        if (distance <= 0.01) s += "L'objet est dans le coin";
-        debugTxt.text = s;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("GPS: Working");
+        foreach(var pt in points)
+        {
+            double d = Distance(currLat, currLon, pt.latitude, pt.longitude, 'K') * 1000.0;
+            sb.AppendFormat(
+            "{0:F6},{1:F6}: {2:F1} m{3}\n",
+            pt.latitude,
+            pt.longitude,
+            d,
+            pt.placed ? " (placed)" : ""
+            );
+        }
+
+        debugTxt.text = sb.ToString();
     }
 
 
