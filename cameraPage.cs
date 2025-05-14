@@ -26,6 +26,7 @@ public class CameraPage : MonoBehaviour
     private Vector2 endTouchPosition;
     private bool isSwiping = false;
     public TMP_Text debugTxt;
+    public TMP_Text calibrateTxt;
     private bool objectPlaced = false;
 
     // ------ Object position variables ------
@@ -41,9 +42,9 @@ public class CameraPage : MonoBehaviour
     private double referenceLon;
     private double referenceAltitude;
 
-    // 47.732059766078514, 7.286153955690549 -- Must change it inside unity as well !!!
-    public double parkingLatitude = 47.732059766078514;
-    public double parkingLongitude = 7.286153955690549;
+    // 47.732033156335284, 7.2862330808561495 -- Must change it inside unity as well !!!
+    public double parkingLatitude = 47.732033156335284;
+    public double parkingLongitude = 7.2862330808561495;
 
 
     IEnumerator Start()
@@ -174,6 +175,12 @@ public class CameraPage : MonoBehaviour
         Vector3 worldOffset = yawRot * geoOffset;
         Vector3 spawnPos = hitPose.position + worldOffset;
 
+        // --- Vertical offest ---
+
+        double currAlt = Input.location.lastData.altitude;
+        float altitudeOffset = (float)(currAlt - referenceAltitude);
+        spawnPos.y += altitudeOffset;
+
         // ------ Attach to that exact ARPlane ------
         if (planeManager == null || anchorManager == null)
         {
@@ -203,6 +210,13 @@ public class CameraPage : MonoBehaviour
         foreach (var p in planeManager.trackables)
             p.gameObject.SetActive(false);
         enabled = false;
+    }
+
+    public void CalibrateGround()
+    {
+        referenceAltitude = Input.location.lastData.altitude;
+        calibrateTxt.text = $"Ground calibrated at {referenceAltitude:F1} m";
+
     }
 
 
