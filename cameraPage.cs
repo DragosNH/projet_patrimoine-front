@@ -18,6 +18,8 @@ public class CameraPage : MonoBehaviour
     [SerializeField] ARSession m_Session;
     [SerializeField] private ARRaycastManager raycastManager;
     [SerializeField] ARAnchorManager anchorManager;
+    [SerializeField] ARPlaneManager planeManager;
+
 
 
     private Vector2 startTouchPosition;
@@ -39,9 +41,9 @@ public class CameraPage : MonoBehaviour
     private double referenceLon;
     private double referenceAltitude;
 
-    // 47.732092007376586, 7.286084665077947
-    public double parkingLatitude = 47.732092007376586;
-    public double parkingLongitude = 7.286084665077947;
+    // 47.732059766078514, 7.286153955690549 -- Must change it inside unity as well !!!
+    public double parkingLatitude = 47.732059766078514;
+    public double parkingLongitude = 7.286153955690549;
 
 
     IEnumerator Start()
@@ -145,7 +147,7 @@ public class CameraPage : MonoBehaviour
         if (!gps_ok || objectPlaced)
             return;
 
-        // Compute flat-earth distance in meters
+        // ------ Compute flat‐earth offset ------
         double currLat = Input.location.lastData.latitude;
         double currLon = Input.location.lastData.longitude;
         double dLat = parkingLatitude - currLat;
@@ -154,43 +156,56 @@ public class CameraPage : MonoBehaviour
         float northMeters = (float)(dLat * 110540f);
         float eastMeters = (float)(dLon * 111320f * Math.Cos(latRad));
         float distance = Mathf.Sqrt(northMeters * northMeters + eastMeters * eastMeters);
-        if (distance > 20f)  
+        if (distance > 50f)
             return;
 
-        // Raycast once from screen center
+        // ------ Raycast ground ------
         var hits = new List<ARRaycastHit>();
         var screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
         if (!raycastManager.Raycast(screenCenter, hits, TrackableType.PlaneWithinPolygon))
             return;
+        Pose hitPose = hits[0].pose;
 
-        // Build geo-offset and rotate into world-space
-        Pose planePose = hits[0].pose;
+        // ------ Geo‐offset + camera yaw ------
         Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
-        Vector3 worldOffset = planePose.rotation * geoOffset;
+        if (Camera.main == null) { Debug.LogError("No Camera.main!"); return; }
+        float heading = Camera.main.transform.eulerAngles.y;
+        Quaternion yawRot = Quaternion.Euler(0f, heading, 0f);
+        Vector3 worldOffset = yawRot * geoOffset;
+        Vector3 spawnPos = hitPose.position + worldOffset;
 
-        // Anchor and instantiate for rock-solid placement
-        Vector3 spawnPos = planePose.position + worldOffset;
+        // ------ Attach to that exact ARPlane ------
+        if (planeManager == null || anchorManager == null)
+        {
+            Debug.LogError("Assign both planeManager and anchorManager in the Inspector!");
+            return;
+        }
+        var trackableId = hits[0].trackableId;
+        ARPlane plane = planeManager.GetPlane(trackableId);
+        ARAnchor anchor = anchorManager.AttachAnchor(plane, new Pose(spawnPos, Quaternion.identity));
 
-        // Create a new GameObject to hold the ARAnchor
-        GameObject anchorGO = new GameObject("ARAnchor");
-        // Position & rotation
-        anchorGO.transform.position = spawnPos;
-        anchorGO.transform.rotation = planePose.rotation;
-        
-        ARAnchor anchor = anchorGO.AddComponent<ARAnchor>();
+        // ------ Instantiate *only once* under that anchor (or fallback) ------
+        if (anchor == null)
+        {
+            Debug.LogWarning("AttachAnchor failed; spawning without anchor.");
+            spawnedObject = Instantiate(objectPrefab, spawnPos, Quaternion.identity);
+        }
+        else
+        {
+            spawnedObject = Instantiate(objectPrefab, anchor.transform);
+        }
 
-        // Parent your spawned object under the anchor
-        spawnedObject = Instantiate(objectPrefab, anchorGO.transform);
-
-        
+        // ------ Finalize—lock it down and hide planes ------
         objectPlaced = true;
-        debugTxt.text = "Bâtiment chargé à l’emplacement du parking.";
-        Debug.Log("Model placed at parking lot.");
-
+        debugTxt.text = "Object chargé à l’emplacement du parking.";
         raycastManager.enabled = false;
-        anchorManager.enabled = false;
+        planeManager.enabled = false;
+        foreach (var p in planeManager.trackables)
+            p.gameObject.SetActive(false);
         enabled = false;
     }
+
+
 
     private void UpdateDebugDisplay()
     {
