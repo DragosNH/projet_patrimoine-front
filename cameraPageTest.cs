@@ -165,11 +165,19 @@ public class CameraPageTest : MonoBehaviour
         DetectSwipe();
         UpdateDebugDisplay();
 
-        if (planeManager.trackables.count == 0)
-            return;
-
         if (!gps_ok)
             return;
+
+        var hits = new List<ARRaycastHit>();
+        var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
+        if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
+        {
+            debugTxt.text = "Recherche de surface ...";
+            return;
+        }
+
+        Pose hitPose = hits[0].pose;
+        ARPlane hitPlane = planeManager.GetPlane(hits[0].trackableId);
 
         foreach (var pt in points)
         {
@@ -187,48 +195,56 @@ public class CameraPageTest : MonoBehaviour
             if (dist > 50f)
                 continue;
 
-            // Raycast to detect plane
-            var hits = new List<ARRaycastHit>();
-            var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
-            if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
-                continue;
-
-            Pose hitPose = hits[0].pose;
-
             // Offset by GPS
-            Vector3 geoOffset = new Vector3(east, 0f, north);
             Quaternion yaw = Quaternion.Euler(0f, Camera.main.transform.eulerAngles.y, 0f);
+            Vector3 geoOffset = new Vector3(east, 0f, north);
             Vector3 worldOffset = yaw * geoOffset;
 
-            Vector3 finalPosition = hitPose.position + worldOffset;
-            finalPosition.y = hitPose.position.y;  // Lock to plane height
+            ARAnchor anchor = anchorManager.AttachAnchor(
+                hitPlane,
+                new Pose(hitPose.position, hitPose.rotation)
+            );
 
-            // Attach to plane
-            ARPlane plane = planeManager.GetPlane(hits[0].trackableId);
-            ARAnchor anchor = anchorManager.AttachAnchor(plane, new Pose(finalPosition, Quaternion.identity));
-
-            if (anchor == null)
+            if (anchor != null)
             {
-                Debug.LogWarning("Anchor attach failed, fallback instantiate");
-                Instantiate(pt.housePrefab, finalPosition, Quaternion.identity);
+                // instantiate as child
+                GameObject go = Instantiate(pt.housePrefab, anchor.transform);
+
+                // compute half model height
+                Bounds combined = new Bounds();
+                var renderers = go.GetComponentsInChildren<Renderer>();
+                if (renderers.Length > 0)
+                {
+                    combined = renderers[0].bounds;
+                    foreach (var r in renderers.Skip(1))
+                        combined.Encapsulate(r.bounds);
+                }
+                float halfHeight = combined.extents.y;
+
+                // apply only horizontal GPS offset, drop base onto plane
+                go.transform.localPosition = new Vector3(worldOffset.x, -halfHeight, worldOffset.z);
             }
             else
             {
-                Instantiate(pt.housePrefab, anchor.transform);
+                // 5) Instantiate as a child so its local Y=0 is exactly on the plane
+                GameObject go = Instantiate(pt.housePrefab, anchor.transform);
+                // 6) Now move it only horizontally in the anchor’s local space
+                go.transform.localPosition = new Vector3(worldOffset.x, 0f, worldOffset.z);
             }
 
             pt.placed = true;
             debugTxt.text = $"Placed: {pt.latitude:F6}, {pt.longitude:F6}";
-
-            if (points.All(x => x.placed))
-            {
-                raycastManager.enabled = false;
-                planeManager.enabled = false;
-                enabled = false;
-            }
-
             break;
         }
+
+        // 7) Once all are placed, shut off the managers
+        if (points.All(x => x.placed))
+        {
+            raycastManager.enabled = false;
+            planeManager.enabled = false;
+            enabled = false;
+        }
+
     }
 
 
