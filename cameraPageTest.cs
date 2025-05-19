@@ -148,7 +148,7 @@ public class CameraPageTest : MonoBehaviour
         }
 
     }
-    // ----------------------------- en of Start function -----------------------------
+    // ----------------------------- end of Start function -----------------------------
 
 
     // ----------------------------- return to main page -----------------------------
@@ -158,11 +158,15 @@ public class CameraPageTest : MonoBehaviour
     }
     // ----------------------------- end of return to main page -----------------------------
 
+
     // ----------------------------- Update function -----------------------------
     void Update()
     {
         DetectSwipe();
         UpdateDebugDisplay();
+
+        if (planeManager.trackables.count == 0)
+            return;
 
         if (!gps_ok)
             return;
@@ -172,7 +176,6 @@ public class CameraPageTest : MonoBehaviour
             if (pt.placed)
                 continue;
 
-            // ------ Distance ------
             double currLat = Input.location.lastData.latitude;
             double currLon = Input.location.lastData.longitude;
             double dLat = pt.latitude - currLat;
@@ -184,30 +187,30 @@ public class CameraPageTest : MonoBehaviour
             if (dist > 50f)
                 continue;
 
-            // ------ AR raycast for the ground ------
+            // Raycast to detect plane
             var hits = new List<ARRaycastHit>();
             var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
             if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
                 continue;
+
             Pose hitPose = hits[0].pose;
 
-            // ------ Geo offset + camera yaw ------
+            // Offset by GPS
             Vector3 geoOffset = new Vector3(east, 0f, north);
-            if (Camera.main == null) { Debug.LogError("No Camera.main"); return; }
-            float heading = Camera.main.transform.eulerAngles.y;
-            Quaternion yaw = Quaternion.Euler(0f, heading, 0f);
+            Quaternion yaw = Quaternion.Euler(0f, Camera.main.transform.eulerAngles.y, 0f);
             Vector3 worldOffset = yaw * geoOffset;
-            Vector3 spawnPos = hitPose.position + worldOffset;
 
-            // ------ Attacthc to the plane ------
+            Vector3 finalPosition = hitPose.position + worldOffset;
+            finalPosition.y = hitPose.position.y;  // Lock to plane height
+
+            // Attach to plane
             ARPlane plane = planeManager.GetPlane(hits[0].trackableId);
-            ARAnchor anchor = anchorManager.AttachAnchor(plane, new Pose(spawnPos, Quaternion.identity));
+            ARAnchor anchor = anchorManager.AttachAnchor(plane, new Pose(finalPosition, Quaternion.identity));
 
-            // ------ Instantiate its prefab ------
             if (anchor == null)
             {
                 Debug.LogWarning("Anchor attach failed, fallback instantiate");
-                Instantiate(pt.housePrefab, spawnPos, Quaternion.identity);
+                Instantiate(pt.housePrefab, finalPosition, Quaternion.identity);
             }
             else
             {
@@ -225,9 +228,9 @@ public class CameraPageTest : MonoBehaviour
             }
 
             break;
-
         }
     }
+
 
     // ----------------------------- end of Update function -----------------------------
 
