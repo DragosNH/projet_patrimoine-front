@@ -156,6 +156,7 @@ public class CameraPageTest : MonoBehaviour
     {
         SceneManager.LoadScene("MainPage");
     }
+    // ----------------------------- end of return to main page -----------------------------
 
     // ----------------------------- Update function -----------------------------
     void Update()
