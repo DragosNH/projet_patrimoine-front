@@ -9,16 +9,22 @@ public class DepthOcclusionManager : MonoBehaviour
 
     void Awake()
     {
+        Debug.Log("[DepthOcclusionManager] Awake");
         occlusionManager = GetComponent<AROcclusionManager>();
+    }
+
+    void Start()
+    {
+        Debug.Log("[DepthOcclusionManager] Start");
     }
 
     void OnEnable()
     {
-        // 1) Check for environment-depth support
+        Debug.Log("[DepthOcclusionManager] OnEnable");
+        // --- Check for environment-depth support ---
         if (occlusionManager.descriptor.environmentDepthImageSupported
                 == Supported.Supported)
         {
-            // quality/speed trade-off: Fastest, Medium or Best
             occlusionManager.requestedEnvironmentDepthMode
                 = EnvironmentDepthMode.Best;
             Debug.Log("[Occlusion] Environment depth enabled (Best).");
@@ -29,7 +35,7 @@ public class DepthOcclusionManager : MonoBehaviour
               "[Occlusion] Environment depth NOT supported on this device.");
         }
 
-        // 2) Check for temporal-smoothing support, then request it
+        // --- Check for temporal-smoothing support, then request it ---
         if (occlusionManager.descriptor.environmentDepthTemporalSmoothingSupported
                 == Supported.Supported)
         {
