@@ -38,10 +38,8 @@ public class CameraPage : MonoBehaviour
     private bool isSwiping = false;
     public TMP_Text debugTxt;
     public TMP_Text calibrateTxt;
-    //private bool objectPlaced = false; -- remove latter
 
     // ------ Object position variables ------
-    //public GameObject objectPrefab; -- Remove latter
     private GameObject spawnedObject;
 
     public bool gps_ok = false;
@@ -52,10 +50,6 @@ public class CameraPage : MonoBehaviour
     private double referenceLat;
     private double referenceLon;
     private double referenceAltitude;
-
-    // 47.732033156335284, 7.2862330808561495 -- Must change it inside unity as well !!!
-    //public double parkingLatitude = 47.732033156335284; -- remove latter
-    //public double parkingLongitude = 7.2862330808561495; -- remove latter
 
     [Tooltip("One entry per house: Gps coordonates + model")]
     public List<GPSPoint> points = new List<GPSPoint>();

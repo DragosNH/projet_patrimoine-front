@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -77,7 +77,7 @@ public class CameraPageTest : MonoBehaviour
         if (ARSession.state == ARSessionState.Unsupported)
         {
             Debug.LogWarning("Your device is not supported for the AR!!!!!");
-            debugTxt.text = "Votre appareil n'est pas compatible avec la réalité augmentée.";
+            debugTxt.text = "Votre appareil n'est pas compatible avec la rÃ©alitÃ© augmentÃ©e.";
         }
         else
         {
@@ -88,7 +88,7 @@ public class CameraPageTest : MonoBehaviour
         if (ARSession.state == ARSessionState.NeedsInstall)
         {
             Debug.Log("You need to install the AR in order for it to work");
-            debugTxt.text = "\nVous devez installer le module de réalité augmentée depuis le Play Store.";
+            debugTxt.text = "\nVous devez installer le module de rÃ©alitÃ© augmentÃ©e depuis le Play Store.";
         }
 
         // ---------------- Location messages ----------------
@@ -96,7 +96,7 @@ public class CameraPageTest : MonoBehaviour
         if (!Input.location.isEnabledByUser)
         {
             Debug.Log("Location not enabled on device or app does not have permission to access location");
-            debugTxt.text = "Votre appareil ne permet pas l'accès à votre localisation.";
+            debugTxt.text = "Votre appareil ne permet pas l'accÃ¨s Ã  votre localisation.";
         }
 
         // Start location service
@@ -114,7 +114,7 @@ public class CameraPageTest : MonoBehaviour
         if (maxWait < 1)
         {
             Debug.Log("Time out");
-            debugTxt.text += "\nLe temps d'attente est passé.";
+            debugTxt.text += "\nLe temps d'attente est passÃ©.";
 
             yield break;
         }
@@ -165,25 +165,31 @@ public class CameraPageTest : MonoBehaviour
         DetectSwipe();
         UpdateDebugDisplay();
 
+        // 1) Donâ€™t proceed until GPS is ready
         if (!gps_ok)
             return;
 
+        // 2) Raycast for a plane under the center of the screen
         var hits = new List<ARRaycastHit>();
         var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
         if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
         {
-            debugTxt.text = "Recherche de surface ...";
+            debugTxt.text = "Recherche de surface â€¦";
             return;
         }
 
+        // 3) Grab the plane hit pose & log its Y
         Pose hitPose = hits[0].pose;
+        Debug.Log($"[TEST 1] Plane Y = {hitPose.position.y:F3}");
         ARPlane hitPlane = planeManager.GetPlane(hits[0].trackableId);
 
+        // 4) Loop your GPS points
         foreach (var pt in points)
         {
             if (pt.placed)
                 continue;
 
+            // a) Distance check
             double currLat = Input.location.lastData.latitude;
             double currLon = Input.location.lastData.longitude;
             double dLat = pt.latitude - currLat;
@@ -195,11 +201,23 @@ public class CameraPageTest : MonoBehaviour
             if (dist > 50f)
                 continue;
 
-            // Offset by GPS
+            // b) Compute horizontal GPS offset in world-space
             Quaternion yaw = Quaternion.Euler(0f, Camera.main.transform.eulerAngles.y, 0f);
             Vector3 geoOffset = new Vector3(east, 0f, north);
             Vector3 worldOffset = yaw * geoOffset;
 
+            // â€”â€” TEST 2: simple placement at plane Y + GPS offset
+            Vector3 testPos = new Vector3(
+                hitPose.position.x + worldOffset.x,
+                hitPose.position.y,
+                hitPose.position.z + worldOffset.z
+            );
+            Debug.Log($"[TEST 2] Simple place at {testPos}");
+            Instantiate(pt.housePrefab, testPos, Quaternion.identity);
+            // comment out the rest if you only want TEST 2:
+            // break;
+
+            // â€”â€” REAL placement: anchor + lift
             ARAnchor anchor = anchorManager.AttachAnchor(
                 hitPlane,
                 new Pose(hitPose.position, hitPose.rotation)
@@ -207,29 +225,38 @@ public class CameraPageTest : MonoBehaviour
 
             if (anchor != null)
             {
-                // instantiate as child
+                // instantiate under anchor (pivot = plane)
                 GameObject go = Instantiate(pt.housePrefab, anchor.transform);
 
-                // compute half model height
+                // compute mesh bounds
                 Bounds combined = new Bounds();
-                var renderers = go.GetComponentsInChildren<Renderer>();
-                if (renderers.Length > 0)
+                var rends = go.GetComponentsInChildren<Renderer>();
+                if (rends.Length > 0)
                 {
-                    combined = renderers[0].bounds;
-                    foreach (var r in renderers.Skip(1))
-                        combined.Encapsulate(r.bounds);
+                    combined = rends[0].bounds;
+                    for (int i = 1; i < rends.Length; i++)
+                        combined.Encapsulate(rends[i].bounds);
                 }
-                float halfHeight = combined.extents.y;
 
-                // apply only horizontal GPS offset, drop base onto plane
-                go.transform.localPosition = new Vector3(worldOffset.x, -halfHeight, worldOffset.z);
+                // log bottom vs. plane
+                float meshBottomY = combined.min.y;
+                float anchorY = anchor.transform.position.y;
+                float liftAmount = anchorY - meshBottomY;
+                Debug.Log($"[TEST 3] meshBottomY={meshBottomY:F3}, anchorY={anchorY:F3}, lift={liftAmount:F3}");
+
+                // apply GPS X/Z + vertical lift
+                go.transform.localPosition = new Vector3(
+                    worldOffset.x,
+                    liftAmount,
+                    worldOffset.z
+                );
             }
             else
             {
-                // 5) Instantiate as a child so its local Y=0 is exactly on the plane
-                GameObject go = Instantiate(pt.housePrefab, anchor.transform);
-                // 6) Now move it only horizontally in the anchor’s local space
-                go.transform.localPosition = new Vector3(worldOffset.x, 0f, worldOffset.z);
+                Vector3 fallback = hitPose.position + worldOffset;
+                fallback.y = hitPose.position.y;
+                Debug.LogWarning("[TEST] Anchor failed, fallback instantiate");
+                Instantiate(pt.housePrefab, fallback, Quaternion.identity);
             }
 
             pt.placed = true;
@@ -237,15 +264,18 @@ public class CameraPageTest : MonoBehaviour
             break;
         }
 
-        // 7) Once all are placed, shut off the managers
+        // 5) Disable once all are placed
         if (points.All(x => x.placed))
         {
             raycastManager.enabled = false;
             planeManager.enabled = false;
             enabled = false;
         }
-
     }
+
+
+
+
 
 
     // ----------------------------- end of Update function -----------------------------
@@ -323,7 +353,7 @@ public class CameraPageTest : MonoBehaviour
             }
             else
             {
-                Debug.Log("Swiped RIGHT — no action");
+                Debug.Log("Swiped RIGHT â€” no action");
             }
         }
     }
