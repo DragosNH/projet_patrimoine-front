@@ -186,7 +186,7 @@ public class CameraPage : MonoBehaviour
         {
             if (pt.placed) continue;
 
-            // 1) Distance check
+            // -- Distance check --
             double currLat = Input.location.lastData.latitude;
             double currLon = Input.location.lastData.longitude;
             double dLat = pt.latitude - currLat;
@@ -195,39 +195,38 @@ public class CameraPage : MonoBehaviour
             float east = (float)(dLon * 111320f * Mathf.Cos((float)(currLat * Mathf.Deg2Rad)));
             if (Mathf.Sqrt(north * north + east * east) > 50f) continue;
 
-            // 2) Raycast for the plane
+            // -- Raycast for the plane --
             var hits = new List<ARRaycastHit>();
             var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
             if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
                 continue;
             Pose hitPose = hits[0].pose;
 
-            // 3) GPS → world offset
+            // -- GPS + world offset--
             Vector3 geoOffset = new Vector3(east, 0, north);
             float heading = Camera.main.transform.eulerAngles.y;
             Vector3 worldOffset = Quaternion.Euler(0, heading, 0) * geoOffset;
 
-            // 4) Determine ground Y via the plane + your pivot tweak
+            // -- Determine ground Y via the plane + your pivot tweak --
             float groundY = hitPose.position.y + verticalOffset;
 
-            // 5) Compute spawnPos = (X,Z) + groundY + current manualYOffset
+            // -- Compute spawnPos --
             Vector3 spawnPos = new Vector3(
                 hitPose.position.x + worldOffset.x,
                 groundY + manualYOffset,
                 hitPose.position.z + worldOffset.z
             );
 
-            // 6) Spawn the prefab **without parenting** (so you can move it later)
+            // -- Spawn the prefab --
             GameObject go = Instantiate(pt.housePrefab, spawnPos, Quaternion.identity);
 
-            // 7) Record for sliding
+            // -- Record for sliding --
             pt.instance = go;
             pt.baseY = groundY;
             pt.placed = true;
 
             debugTxt.text = $"Placed at Y={groundY:F2}";
 
-            // 8) Stop after one per frame
             break;
         }
     }
