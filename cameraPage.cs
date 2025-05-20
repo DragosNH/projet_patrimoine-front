@@ -15,10 +15,19 @@ using System.Linq;
 
 public class CameraPage : MonoBehaviour
 {
+    [Header("UI Controls")]
+    public Slider heightSlider;
+
     [SerializeField] ARSession m_Session;
     [SerializeField] private ARRaycastManager raycastManager;
     [SerializeField] ARAnchorManager anchorManager;
     [SerializeField] ARPlaneManager planeManager;
+    [Tooltip("Adjust this if your model pivot isn't at the base.")]
+    public float verticalOffset = 0f;
+
+    [Header("Manual Y-Offset (meters)")]
+    [Tooltip("0 = ground. Slide up/down if it floats.")]
+    public float manualYOffset = 0f;
 
     [System.Serializable]
     public class GPSPoint
@@ -31,6 +40,9 @@ public class CameraPage : MonoBehaviour
         public GameObject housePrefab;
 
         [HideInInspector] public bool placed = false;
+
+        [HideInInspector] public GameObject instance;
+        [HideInInspector] public float baseY;
     }
 
     private Vector2 startTouchPosition;
@@ -114,7 +126,7 @@ public class CameraPage : MonoBehaviour
         }
 
         // If connection faield this will cancel the service use
-        if(Input.location.status == LocationServiceStatus.Failed)
+        if (Input.location.status == LocationServiceStatus.Failed)
         {
             Debug.LogError("Unable to determine device location");
             debugTxt.text += "\nImpossible de trouver la localisation de l'appareil.";
@@ -138,11 +150,15 @@ public class CameraPage : MonoBehaviour
             referenceLat = Input.location.lastData.latitude;
             referenceLon = Input.location.lastData.longitude;
             referenceAltitude = Input.location.lastData.altitude;
-
         }
-        
+
+        if (heightSlider != null)
+            heightSlider.onValueChanged.AddListener(OnManualYOffsetChanged);
+
+
+
     }
-    // ----------------------------- en of Start function -----------------------------
+    // ----------------------------- end of Start function -----------------------------
 
 
     // ----------------------------- return to main page -----------------------------
@@ -150,6 +166,8 @@ public class CameraPage : MonoBehaviour
     {
         SceneManager.LoadScene("MainPage");
     }
+    // ----------------------------- end of return to main page -----------------------------
+
 
     // ----------------------------- Update function -----------------------------
     void Update()
@@ -157,72 +175,83 @@ public class CameraPage : MonoBehaviour
         DetectSwipe();
         UpdateDebugDisplay();
 
-        if (!gps_ok)
-            return;
+        if (!gps_ok) return;
+
+        if (heightSlider != null)
+        {
+            Debug.Log($"[DEBUG SLIDER] slider.value={heightSlider.value:F2}");
+        }
 
         foreach (var pt in points)
         {
-            if (pt.placed)
-                continue;
+            if (pt.placed) continue;
 
-            // ------ Distance ------
+            // 1) Distance check
             double currLat = Input.location.lastData.latitude;
             double currLon = Input.location.lastData.longitude;
             double dLat = pt.latitude - currLat;
             double dLon = pt.longitude - currLon;
-            double latRad = currLat * Mathf.Deg2Rad;
             float north = (float)(dLat * 110540f);
-            float east = (float)(dLon * 111320f * Math.Cos(latRad));
-            float dist = Mathf.Sqrt(north * north + east * east);
-            if (dist > 50f)
-                continue;
+            float east = (float)(dLon * 111320f * Mathf.Cos((float)(currLat * Mathf.Deg2Rad)));
+            if (Mathf.Sqrt(north * north + east * east) > 50f) continue;
 
-            // ------ AR raycast for the ground ------
+            // 2) Raycast for the plane
             var hits = new List<ARRaycastHit>();
             var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
             if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
                 continue;
             Pose hitPose = hits[0].pose;
 
-            // ------ Geo offset + camera yaw ------
-            Vector3 geoOffset = new Vector3(east, 0f, north);
-            if(Camera.main == null) { Debug.LogError("No Camera.main"); return; }
+            // 3) GPS → world offset
+            Vector3 geoOffset = new Vector3(east, 0, north);
             float heading = Camera.main.transform.eulerAngles.y;
-            Quaternion yaw = Quaternion.Euler(0f, heading, 0f);
-            Vector3 worldOffset = yaw * geoOffset;
-            Vector3 spawnPos = hitPose.position + worldOffset;
+            Vector3 worldOffset = Quaternion.Euler(0, heading, 0) * geoOffset;
 
-            // ------ Attacthc to the plane ------
-            ARPlane plane = planeManager.GetPlane(hits[0].trackableId);
-            ARAnchor anchor = anchorManager.AttachAnchor(plane, new Pose(spawnPos, Quaternion.identity));
+            // 4) Determine ground Y via the plane + your pivot tweak
+            float groundY = hitPose.position.y + verticalOffset;
 
-            // ------ Instantiate its prefab ------
-            if(anchor == null)
-            {
-                Debug.LogWarning("Anchor attach failed, fallback instantiate");
-                Instantiate(pt.housePrefab, spawnPos, Quaternion.identity);
-            }
-            else
-            {
-                Instantiate(pt.housePrefab, anchor.transform);
-            }
+            // 5) Compute spawnPos = (X,Z) + groundY + current manualYOffset
+            Vector3 spawnPos = new Vector3(
+                hitPose.position.x + worldOffset.x,
+                groundY + manualYOffset,
+                hitPose.position.z + worldOffset.z
+            );
 
+            // 6) Spawn the prefab **without parenting** (so you can move it later)
+            GameObject go = Instantiate(pt.housePrefab, spawnPos, Quaternion.identity);
+
+            // 7) Record for sliding
+            pt.instance = go;
+            pt.baseY = groundY;
             pt.placed = true;
-            debugTxt.text = $"Placed: {pt.latitude:F6}, {pt.longitude:F6}";
 
-            if(points.All(x => x.placed))
-            {
-                raycastManager.enabled = false;
-                planeManager.enabled = false;
-                enabled = false;
-            }
+            debugTxt.text = $"Placed at Y={groundY:F2}";
 
+            // 8) Stop after one per frame
             break;
-                
         }
     }
 
+
     // ----------------------------- end of Update function -----------------------------
+
+    // ----------------------------- Offset change function -----------------------------
+    public void OnManualYOffsetChanged(float newOffset)
+    {
+        manualYOffset = newOffset;
+        Debug.Log($"Slider fired! manualYOffset = {manualYOffset}");
+
+        foreach (var pt in points)
+        {
+            if (!pt.placed || pt.instance == null) continue;
+            Vector3 p = pt.instance.transform.position;
+            p.y = pt.baseY + manualYOffset;
+            pt.instance.transform.position = p;
+            Debug.Log($"Moved instance to Y = {p.y:F2}");
+        }
+    }
+    // ----------------------------- end of Offset change function -----------------------------
+
 
     // ----------------------------- CalibrateGround function -----------------------------
     public void CalibrateGround()
@@ -231,7 +260,6 @@ public class CameraPage : MonoBehaviour
         calibrateTxt.text = $"Ground calibrated at {referenceAltitude:F1} m";
 
     }
-
 
     // ----------------------------- UpdateDebugDisplay function -----------------------------
     private void UpdateDebugDisplay()
