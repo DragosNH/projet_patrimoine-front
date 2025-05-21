@@ -71,7 +71,8 @@ public class ProfileScecne: MonoBehaviour
     public TextMeshProUGUI[] texts;
 
     // -- Url --
-    string apiUrl = NetworkConfig.ServerIP + "/api/profile/";
+    string apiUrl = NetworkConfig.ServerIP;
+    //string apiUrl = NetworkConfig.ServerIP + "/api/profile/";
 
     void Start()
     {
@@ -155,7 +156,7 @@ public class ProfileScecne: MonoBehaviour
             yield break;
         }
 
-        UnityWebRequest request = UnityWebRequest.Get(apiUrl);
+        UnityWebRequest request = UnityWebRequest.Get(apiUrl + "/api/profile/");
         request.SetRequestHeader("Authorization", "Bearer " + token);
 
         yield return request.SendWebRequest();
@@ -194,7 +195,7 @@ public class ProfileScecne: MonoBehaviour
     {
         string refresh = PlayerPrefs.GetString("refresh_token");
 
-        UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:8000/api/logout/", "POST");
+        UnityWebRequest request = new UnityWebRequest(apiUrl + "/api/logout/", "POST");
         byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes("{\"refresh\":\"" + refresh + "\"}");
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
@@ -261,7 +262,7 @@ public class ProfileScecne: MonoBehaviour
         string jsonBody = "{\"password\":\"" + password + "\"}";
         byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
 
-        UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:8000/api/delete-account/", "DELETE");
+        UnityWebRequest request = new UnityWebRequest(apiUrl + "/api/delete-account/", "DELETE");
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Authorization", "Bearer " + token); 
