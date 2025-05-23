@@ -3,7 +3,9 @@ using UnityEngine.Networking;
 using System.Collections;
 using System.Collections.Generic;
 using System;
+using System.Linq;
 using TMPro;
+using Newtonsoft.Json;
 
 
 [Serializable]
@@ -12,9 +14,9 @@ public class ModelInfo
     public int id;
     public string name;
     public string file;
-    public float latitude;
-    public float longitude;
-    public float altitude;
+    public double latitude;
+    public double longitude;
+    public double altitude;
 }
 
 [Serializable]
@@ -29,15 +31,43 @@ public class ModelLoader : MonoBehaviour
     [Tooltip("Point this at your /api/models/ JSON endpoint")]
     public string apiUrl = NetworkConfig.ServerIP + "/api/models/";
 
+    [Header("Calibration Points")]
+    [Tooltip("Enter one or more trusted GPS readings here to improve accuracy")]
+    public List<LatLon> calibrationPoints = new List<LatLon>();
 
-    [Header("Origin GPS (for Geo→World)")]
-    public float originLat = 48.5734f;
-    public float originLon = 7.7521f;
+    private double _originLat;
+    private double _originLon;
+
+    [Serializable]
+    public struct LatLon
+    {
+        [Tooltip("Calibration latitude (decimal degrees)")]
+        public double latitude;
+        [Tooltip("Calibration longitude (decimal degrees)")]
+        public double longitude;
+    }
 
     public TMP_Text debugTxt;
 
     void Start()
     {
+
+        Input.location.Start();
+
+        if (calibrationPoints != null && calibrationPoints.Count > 0)
+        {
+            _originLat = calibrationPoints.Average(p => p.latitude);
+            _originLon = calibrationPoints.Average(p => p.longitude);
+            debugTxt.text = $"Using {calibrationPoints.Count} manual calibrations";
+        }
+        else
+        {
+            _originLat = (float)Input.location.lastData.latitude;
+            _originLon = (float)Input.location.lastData.longitude;
+            debugTxt.text = $"Using device GPS origin";
+        }
+
+
         StartCoroutine(FetchAndLoad());
     }
 
@@ -62,44 +92,40 @@ public class ModelLoader : MonoBehaviour
         }
     }
 
-    Vector3 GeoToWorld(float lat, float lon, float alt)
+    Vector3 GeoToWorld(double lat, double lon, double alt)
     {
-        float metersPerDegLat = 111132f;
-        float metersPerDegLon = 111320f * Mathf.Cos(originLat * Mathf.Deg2Rad);
-        float x = (lon - originLon) * metersPerDegLon;
-        float z = (lat - originLat) * metersPerDegLat;
-        return new Vector3(x, alt, z);
+        double metersPerDegLat = 111132.0;
+        double metersPerDegLon = 111320.0 * Math.Cos(_originLat * Math.PI / 180.0);
+
+        double x = (lon - _originLon) * metersPerDegLon;
+        double z = (lat - _originLat) * metersPerDegLat;
+        float y = (float)alt;
+
+        return new Vector3((float)x, y, (float)z);
     }
 
     IEnumerator DownloadAndInstantiate(ModelInfo info)
     {
-        Debug.Log($"[ModelLoader] ▶ Starting DownloadAndInstantiate for {info.name} (URL: {info.file})"); // ← Debug Text
-        debugTxt.text = $"[ModelLoader] ▶ Starting DownloadAndInstantiate for {info.name} (URL: {info.file})"; // ← Debug Text
-    
+        debugTxt.text = $"Downloading {info.name} from {info.file}";
 
-        UnityWebRequest bundleReq = UnityWebRequestAssetBundle.GetAssetBundle(info.file);
-        Debug.Log($"[ModelLoader] → Sending request..."); // ← Debug Text
-        debugTxt.text = $"[ModelLoader] → Sending request..."; // ← Debug Text
+        var bundleReq = UnityWebRequestAssetBundle.GetAssetBundle(info.file);
         yield return bundleReq.SendWebRequest();
 
         if (bundleReq.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError($"Failed to download bundle for {info.name}: {bundleReq.error}");
+            Debug.LogError($"Download failed: {bundleReq.error}");
             yield break;
         }
-        Debug.Log($"[ModelLoader] ✔ Download succeeded for {info.name}, bytes received: {bundleReq.downloadedBytes}"); // ← Debug Text
-        debugTxt.text = $"[ModelLoader] ✔ Download succeeded for {info.name}, bytes received: {bundleReq.downloadedBytes}"; // ← Debug Text
 
         var bundle = DownloadHandlerAssetBundle.GetContent(bundleReq);
-        string[] assetNames = bundle.GetAllAssetNames();
-
+        var assetNames = bundle.GetAllAssetNames();
         var prefab = bundle.LoadAsset<GameObject>(assetNames[0]);
-        var go = Instantiate(prefab,
-                             GeoToWorld(info.latitude, info.longitude, info.altitude),
-                             Quaternion.identity);
-        go.name = info.name;
+        var worldPos = GeoToWorld(info.latitude, info.longitude, info.altitude);
+        var instance = Instantiate(prefab, worldPos, Quaternion.identity);
+        instance.name = info.name;
 
         bundle.Unload(false);
+        debugTxt.text = $"{info.name} instantiated";
     }
 
 }
