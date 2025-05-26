@@ -13,11 +13,33 @@ using Newtonsoft.Json;
 
 
 
-
 public class CameraPage : MonoBehaviour
 {
     [Header("UI Controls")]
     public Slider heightSlider;
+
+    // --------- ↓ Backend link for the 3d models ↓ ---------
+    [Header("API Settings")]
+    [Tooltip("Point this at your /api/models/ JSON endpoint")]
+    public string apiUrl = NetworkConfig.ServerIP + "/api/models/";
+
+    [Header("Calibration Points")]
+    [Tooltip("Enter one or more trusted GPS readings here to improve accuracy")]
+    public List<LatLon> calibrationPoints = new List<LatLon>();
+
+    private double _originLat;
+    private double _originLon;
+
+    [Serializable]
+    public struct LatLon
+    {
+        [Tooltip("Calibration latitude (decimal degrees)")]
+        public double latitude;
+        [Tooltip("Calibration longitude (decimal degrees)")]
+        public double longitude;
+    }
+    // --------- ↑ Backend link for the 3d models ↑ ---------
+
 
     [SerializeField] ARSession m_Session;
     [SerializeField] private ARRaycastManager raycastManager;
@@ -34,14 +56,12 @@ public class CameraPage : MonoBehaviour
     public class GPSPoint
     {
         [Header("Location of the object")]
+        public ModelInfo info;
         public double latitude;
         public double longitude;
 
-        [Header("Selected house")]
-        public GameObject housePrefab;
-
-        [HideInInspector] public bool placed = false;
-
+        [HideInInspector] public GameObject downloadedPrefab;
+        [HideInInspector] public bool placed;
         [HideInInspector] public GameObject instance;
         [HideInInspector] public float baseY;
     }
@@ -52,8 +72,6 @@ public class CameraPage : MonoBehaviour
     public TMP_Text debugTxt;
     public TMP_Text calibrateTxt;
 
-    // ------ Object position variables ------
-    private GameObject spawnedObject;
 
     public bool gps_ok = false;
 
@@ -71,10 +89,10 @@ public class CameraPage : MonoBehaviour
     // ----------------------------- Start function -----------------------------
     IEnumerator Start()
     {
-        // Keep the screen on as long as the camera scene is running
+        // Keep the screen on as long as this scene is running
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
-        // AR warnings
+        // --- AR availability / install checks ---
         if ((ARSession.state == ARSessionState.None) ||
             (ARSession.state == ARSessionState.CheckingAvailability))
         {
@@ -83,84 +101,172 @@ public class CameraPage : MonoBehaviour
 
         if (ARSession.state == ARSessionState.Unsupported)
         {
-            Debug.LogWarning("Your device is not supported for the AR!!!!!");
             debugTxt.text = "Votre appareil n'est pas compatible avec la réalité augmentée.";
+            yield break;
         }
         else
         {
-            // Start the AR session
             m_Session.enabled = true;
         }
 
         if (ARSession.state == ARSessionState.NeedsInstall)
         {
-            Debug.Log("You need to install the AR in order for it to work");
-            debugTxt.text = "\nVous devez installer le module de réalité augmentée depuis le Play Store.";
+            debugTxt.text = "Vous devez installer le module de réalité augmentée depuis le Play Store.";
+            yield break;
         }
 
-        // ---------------- Location messages ----------------
-        // Check if the user has the location on
+        // --- Location permission & start ---
         if (!Input.location.isEnabledByUser)
         {
-            Debug.Log("Location not enabled on device or app does not have permission to access location");
             debugTxt.text = "Votre appareil ne permet pas l'accès à votre localisation.";
+            yield break;
         }
-
-        // Start location service
         Input.location.Start();
 
-        // Waits until the location service initializes
+        // Wait for location service to initialize
         int maxWait = 20;
         while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
         {
             yield return new WaitForSeconds(1);
             maxWait--;
         }
-
-        // If the service didn't initialize in 20 seconds this cancels location service use.
         if (maxWait < 1)
         {
-            Debug.Log("Time out");
             debugTxt.text += "\nLe temps d'attente est passé.";
-
             yield break;
         }
 
-        // If connection faield this will cancel the service use
         if (Input.location.status == LocationServiceStatus.Failed)
         {
-            Debug.LogError("Unable to determine device location");
             debugTxt.text += "\nImpossible de trouver la localisation de l'appareil.";
-
             yield break;
         }
         else
         {
-            // If the connection succeeded, it will retrive the current location
-            Debug.Log("Location: " + Input.location.lastData.latitude + " " + Input.location.lastData.longitude + " " + Input.location.lastData.altitude + " " + Input.location.lastData.horizontalAccuracy + " " + Input.location.lastData.timestamp);
-
-            debugTxt.text
-               = "\nLocalisation: \nLat: " + Input.location.lastData.latitude
-                + " \nLon: " + Input.location.lastData.longitude
-                + " \nAlt: " + Input.location.lastData.altitude
-                + " \nH_Acc: " + Input.location.lastData.horizontalAccuracy
-                + " \nTemps: " + Input.location.lastData.timestamp;
-
             gps_ok = true;
-
             referenceLat = Input.location.lastData.latitude;
             referenceLon = Input.location.lastData.longitude;
             referenceAltitude = Input.location.lastData.altitude;
+
+            debugTxt.text =
+                $"Localisation OK:\nLat: {referenceLat:F6}\n" +
+                $"Lon: {referenceLon:F6}\n" +
+                $"Alt: {referenceAltitude:F1} m";
         }
 
+        // --- Manual Y-offset slider listener ---
         if (heightSlider != null)
             heightSlider.onValueChanged.AddListener(OnManualYOffsetChanged);
 
+        // --- Compute geo‐origin for relative positioning ---
+        if (calibrationPoints != null && calibrationPoints.Count > 0)
+        {
+            _originLat = calibrationPoints.Average(p => p.latitude);
+            _originLon = calibrationPoints.Average(p => p.longitude);
+            debugTxt.text += $"\nUsing {calibrationPoints.Count} manual calibrations";
+        }
+        else
+        {
+            _originLat = referenceLat;
+            _originLon = referenceLon;
+            debugTxt.text += "\nUsing device GPS origin";
+        }
+
+        // --- Kick off your Fetch & Cache pipeline ---
+        StartCoroutine(FetchAndCacheModels());
+    }
+
+    IEnumerator FetchAndCacheModels()
+    {
+        // 1) Fetch the JSON list
+        var req = UnityWebRequest.Get(apiUrl);
+        req.SetRequestHeader("Authorization",
+            "Bearer " + PlayerPrefs.GetString("access_token"));
+        yield return req.SendWebRequest();
+        if (req.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogError($"Failed to fetch model list: {req.error}");
+            yield break;
+        }
+
+        // 2) Parse into ModelInfoList
+        string wrapped = "{\"results\":" + req.downloadHandler.text + "}";
+        var list = JsonUtility.FromJson<ModelInfoList>(wrapped);
+
+        // 3) For each ModelInfo, find the matching GPSPoint and
+        points.Clear();
+        foreach(var info in list.results)
+        {
+            var pt = new GPSPoint
+            {
+                info = info,
+                latitude = info.latitude,
+                longitude = info.longitude,
+                placed = false
+            };
+            points.Add(pt);
+            StartCoroutine(DownloadAndCachePrefab(info, pt));
+        }
+    }
+
+    IEnumerator DownloadAndCachePrefab(ModelInfo info, GPSPoint pt)
+    {
+        debugTxt.text = $"Downloading {info.name}…";
+
+        var bundleReq = UnityWebRequestAssetBundle.GetAssetBundle(info.file);
+        yield return bundleReq.SendWebRequest();
+        if (bundleReq.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogError($"Download failed: {bundleReq.error}");
+            yield break;
+        }
+
+        var bundle = DownloadHandlerAssetBundle.GetContent(bundleReq);
+        var assetNames = bundle.GetAllAssetNames();
+        var prefab = bundle.LoadAsset<GameObject>(assetNames[0]);
+        pt.downloadedPrefab = prefab;
+
+        bundle.Unload(false);
+        debugTxt.text = $"{info.name} cached";
 
 
     }
     // ----------------------------- end of Start function -----------------------------
 
+    // ----------------------------- Download and Instantiate -----------------------------
+
+    IEnumerator DownloadAndInstantiate(ModelInfo info, ARRaycastHit hit)
+    {
+        // 1) Download bundle
+        var uwr = UnityWebRequestAssetBundle.GetAssetBundle(info.file);
+        yield return uwr.SendWebRequest();
+        if (uwr.result != UnityWebRequest.Result.Success)
+        {
+            debugTxt.text = $"Bundle download failed: {uwr.error}";
+            yield break;
+        }
+
+        // 2) Load prefab
+        var bundle = DownloadHandlerAssetBundle.GetContent(uwr);
+        var assetNames = bundle.GetAllAssetNames();
+        var prefab = bundle.LoadAsset<GameObject>(assetNames[0]);
+        bundle.Unload(false);
+
+        // 3) Attach anchor to the plane you hit
+        ARPlane plane = planeManager.GetPlane(hit.trackableId);
+        ARAnchor anchor = (plane != null)
+            ? anchorManager.AttachAnchor(plane, hit.pose)
+            : null;
+
+        // 4) Instantiate under that anchor (or directly at pose)
+        if (anchor != null)
+            Instantiate(prefab, anchor.transform);
+        else
+            Instantiate(prefab, hit.pose.position, hit.pose.rotation);
+    }
+
+
+    // ----------------------------- end of Download and Instantiate -----------------------------
 
     // ----------------------------- return to main page -----------------------------
     public void Return()
@@ -176,64 +282,75 @@ public class CameraPage : MonoBehaviour
         DetectSwipe();
         UpdateDebugDisplay();
 
-        if (!gps_ok) return;
-
-        if (heightSlider != null)
-        {
-            Debug.Log($"[DEBUG SLIDER] slider.value={heightSlider.value:F2}");
-        }
+        if (!gps_ok)
+            return;
 
         foreach (var pt in points)
         {
-            if (pt.placed) continue;
-
-            // -- Distance check --
-            double currLat = Input.location.lastData.latitude;
-            double currLon = Input.location.lastData.longitude;
-            double dLat = pt.latitude - currLat;
-            double dLon = pt.longitude - currLon;
-            float north = (float)(dLat * 110540f);
-            float east = (float)(dLon * 111320f * Mathf.Cos((float)(currLat * Mathf.Deg2Rad)));
-            if (Mathf.Sqrt(north * north + east * east) > 50f) continue;
-
-            // -- Raycast for the plane --
-            var hits = new List<ARRaycastHit>();
-            var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
-            if (!raycastManager.Raycast(center, hits, TrackableType.PlaneWithinPolygon))
+            if (pt.placed || pt.downloadedPrefab == null)
                 continue;
-            Pose hitPose = hits[0].pose;
 
-            // -- GPS + world offset--
+            // Distance check
+            var curr = Input.location.lastData;
+            float north = (float)((pt.latitude - curr.latitude) * 110540f);
+            float east = (float)((pt.longitude - curr.longitude) * 111320f *
+                                  Mathf.Cos(curr.latitude * Mathf.Deg2Rad));
+            if (Mathf.Sqrt(north * north + east * east) > 50f)
+                continue;
+
+            // Raycast against AR planes
+            var hits = new List<ARRaycastHit>();
+            var screen = new Vector2(Screen.width / 2f, Screen.height / 2f);
+            if (!raycastManager.Raycast(screen, hits, TrackableType.PlaneWithinPolygon))
+                continue;
+
+            // Grab the first hit
+            var hit = hits[0];
+            Pose hitPose = hit.pose;
+
+            // Compute world‐space spawnPos (in case we need it)
             Vector3 geoOffset = new Vector3(east, 0, north);
             float heading = Camera.main.transform.eulerAngles.y;
-            Vector3 worldOffset = Quaternion.Euler(0, heading, 0) * geoOffset;
-
-            // -- Determine ground Y via the plane + your pivot tweak --
+            Vector3 worldOff = Quaternion.Euler(0, heading, 0) * geoOffset;
             float groundY = hitPose.position.y + verticalOffset;
-
-            // -- Compute spawnPos --
             Vector3 spawnPos = new Vector3(
-                hitPose.position.x + worldOffset.x,
+                hitPose.position.x + worldOff.x,
                 groundY + manualYOffset,
-                hitPose.position.z + worldOffset.z
+                hitPose.position.z + worldOff.z
             );
 
-            // -- Spawn the prefab --
-            GameObject go = Instantiate(pt.housePrefab, spawnPos, Quaternion.identity);
+            // Attach an ARAnchor to the plane you hit
+            ARPlane plane = planeManager.GetPlane(hit.trackableId);
+            ARAnchor anchor = (plane != null)
+                ? anchorManager.AttachAnchor(plane, hitPose)
+                : null;
 
-            // -- Record for sliding --
+            // Instantiate under that anchor (or at spawnPos if anchoring failed)
+            GameObject go;
+            if (anchor != null)
+            {
+                go = Instantiate(pt.downloadedPrefab, anchor.transform);
+            }
+            else
+            {
+                go = Instantiate(pt.downloadedPrefab, spawnPos, Quaternion.identity);
+            }
+
+            // Record Y‐offset base and mark “placed”
             pt.instance = go;
             pt.baseY = groundY;
             pt.placed = true;
-
             debugTxt.text = $"Placed at Y={groundY:F2}";
-
             break;
         }
+
     }
 
 
+
+
     // ----------------------------- end of Update function -----------------------------
+
 
     // ----------------------------- Offset change function -----------------------------
     public void OnManualYOffsetChanged(float newOffset)
@@ -271,7 +388,7 @@ public class CameraPage : MonoBehaviour
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("GPS: Working");
-        foreach(var pt in points)
+        foreach (var pt in points)
         {
             double d = Distance(currLat, currLon, pt.latitude, pt.longitude, 'K') * 1000.0;
             sb.AppendFormat(
@@ -354,7 +471,7 @@ public class CameraPage : MonoBehaviour
 
     private double Distance(double lat1, double lon1, double lat2, double lon2, char unit)
     {
-        if((lat1 == lat2) && (lon1 == lon2))
+        if ((lat1 == lat2) && (lon1 == lon2))
         {
             return 0;
         }
@@ -365,11 +482,11 @@ public class CameraPage : MonoBehaviour
             dist = Math.Acos(dist);
             dist = rad2deg(dist);
             dist = dist * 60 * 1.1515;
-            if(unit == 'K')
+            if (unit == 'K')
             {
                 dist = dist * 1.609344;
             }
-            else if(unit == 'N')
+            else if (unit == 'N')
             {
                 dist = dist * 0.8684;
             }
