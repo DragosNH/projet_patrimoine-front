@@ -12,7 +12,6 @@ using TMPro;
 using Newtonsoft.Json;
 
 
-
 public class CameraPage : MonoBehaviour
 {
     [Header("UI Controls")]
@@ -57,6 +56,7 @@ public class CameraPage : MonoBehaviour
     {
         [Header("Location of the object")]
         public ModelInfo info;
+
         [HideInInspector] public double latitude;
         [HideInInspector] public double longitude;
 
@@ -71,7 +71,6 @@ public class CameraPage : MonoBehaviour
     private bool isSwiping = false;
     public TMP_Text debugTxt;
     public TMP_Text calibrateTxt;
-
 
     public bool gps_ok = false;
 
