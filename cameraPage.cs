@@ -57,8 +57,8 @@ public class CameraPage : MonoBehaviour
     {
         [Header("Location of the object")]
         public ModelInfo info;
-        public double latitude;
-        public double longitude;
+        [HideInInspector] public double latitude;
+        [HideInInspector] public double longitude;
 
         [HideInInspector] public GameObject downloadedPrefab;
         [HideInInspector] public bool placed;
@@ -295,63 +295,53 @@ public class CameraPage : MonoBehaviour
         if (!gps_ok)
             return;
 
-        foreach (var pt in points)
+        // --- Current GPS reading ---
+        var curr = Input.location.lastData;
+        double currLat = curr.latitude;
+        double currLon = curr.longitude;
+
+        // --- Replace if user walked 500m away ---
+        double distFromOriginKm = Distance(_originLat, _originLon, currLat, currLon, 'K');
+        if(distFromOriginKm * 1000.0 > 500.0f)
         {
-            if (pt.placed || pt.downloadedPrefab == null)
-                continue;
+            _originLat = currLat;
+            _originLon = currLon;
+            Debug.Log($"Rebased origin: {_originLat:F6}, {_originLon:F6}");
+        }
 
-            // Distance check
-            var curr = Input.location.lastData;
-            float north = (float)((pt.latitude - curr.latitude) * 110540f);
-            float east = (float)((pt.longitude - curr.longitude) * 111320f *
-                                  Mathf.Cos(curr.latitude * Mathf.Deg2Rad));
-            if (Mathf.Sqrt(north * north + east * east) > 50f)
-                continue;
+        // --- Get AR Camera's world position
+        Vector3 cameraWorldPos = Camera.main.transform.position;
+        float cameraYawDegrees = Camera.main.transform.eulerAngles.y;
 
-            // Raycast against AR planes
-            var hits = new List<ARRaycastHit>();
-            var screen = new Vector2(Screen.width / 2f, Screen.height / 2f);
-            if (!raycastManager.Raycast(screen, hits, TrackableType.PlaneWithinPolygon))
-                continue;
+        foreach(var pt in points)
+        {
+            if (pt.placed || pt.downloadedPrefab == null) continue;
 
-            // Grab the first hit
-            var hit = hits[0];
-            Pose hitPose = hit.pose;
+            // -- Check distance --
+            double distKm = Distance(currLat, currLon, pt.latitude, pt.longitude, 'K');
+            float distM = (float)(distKm * 1000.0);
+            if (distM > 50f) continue;
 
-            // Compute world‐space spawnPos (in case we need it)
-            Vector3 geoOffset = new Vector3(east, 0, north);
-            float heading = Camera.main.transform.eulerAngles.y;
-            Vector3 worldOff = Quaternion.Euler(0, heading, 0) * geoOffset;
-            float groundY = hitPose.position.y + verticalOffset;
-            Vector3 spawnPos = new Vector3(
-                hitPose.position.x + worldOff.x,
-                groundY + manualYOffset,
-                hitPose.position.z + worldOff.z
-            );
+            // -- Compute cardinal points --
+            float northMeters = (float)((pt.latitude - _originLat) * 110540f);
+            float eastMeters = (float)((pt.longitude - _originLon) * 111320f * Mathf.Cos((float)(_originLat * Mathf.Deg2Rad)));
 
-            // Attach an ARAnchor to the plane you hit
-            ARPlane plane = planeManager.GetPlane(hit.trackableId);
-            ARAnchor anchor = (plane != null)
-                ? anchorManager.AttachAnchor(plane, hitPose)
-                : null;
+            Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
 
-            // Instantiate under that anchor (or at spawnPos if anchoring failed)
-            GameObject go;
-            if (anchor != null)
-            {
-                go = Instantiate(pt.downloadedPrefab, anchor.transform);
-            }
-            else
-            {
-                go = Instantiate(pt.downloadedPrefab, spawnPos, Quaternion.identity);
-            }
+            // -- Rotate camera --
+            Vector3 rotatedOffset = Quaternion.Euler(0f, cameraYawDegrees, 0f) * geoOffset;
 
-            // Record Y‐offset base and mark “placed”
+            // -- Build final spawn position --
+            Vector3 spawnPos = cameraWorldPos + rotatedOffset + Vector3.up * (verticalOffset + manualYOffset);
+
+            // -- Instantiate at SpawnPos -- 
+            GameObject go = Instantiate(pt.downloadedPrefab, spawnPos, Quaternion.identity);
+
             pt.instance = go;
-            pt.baseY = groundY;
+            pt.baseY = spawnPos.y - manualYOffset;
             pt.placed = true;
-            debugTxt.text = $"Placed at Y={groundY:F2}";
-            break;
+            debugTxt.text = $"Placed {pt.info.name} ({distM:F1} m away) at Y={spawnPos.y:F2}";
+
         }
 
     }
@@ -371,6 +361,7 @@ public class CameraPage : MonoBehaviour
         foreach (var pt in points)
         {
             if (!pt.placed || pt.instance == null) continue;
+
             Vector3 p = pt.instance.transform.position;
             p.y = pt.baseY + manualYOffset;
             pt.instance.transform.position = p;

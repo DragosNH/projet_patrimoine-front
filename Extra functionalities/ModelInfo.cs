@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 [Serializable]
 public class ModelInfo
@@ -6,9 +7,9 @@ public class ModelInfo
     public int id;
     public string name;
     public string file;
-    public double latitude;
-    public double longitude;
-    public double altitude;
+    [HideInInspector] public double latitude;
+    [HideInInspector] public double longitude;
+    [HideInInspector] public double altitude;
 }
 
 [Serializable]
