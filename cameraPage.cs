@@ -178,6 +178,9 @@ public class CameraPage : MonoBehaviour
 
     IEnumerator FetchAndCacheModels()
     {
+        double userLat = referenceLat;
+        double userLon = referenceLon;
+
         // 1) Fetch the JSON list
         var req = UnityWebRequest.Get(apiUrl);
         req.SetRequestHeader("Authorization",
@@ -194,8 +197,14 @@ public class CameraPage : MonoBehaviour
         var list = JsonUtility.FromJson<ModelInfoList>(wrapped);
 
         // 3) For each ModelInfo, find the matching GPSPoint and
+        var sortedResults = list.results.OrderBy(info =>
+        {
+            return (userLat, userLon, info.latitude, info.longitude, 'K');
+        }).ToList();
+
         points.Clear();
-        foreach(var info in list.results)
+
+        foreach(var  info in sortedResults)
         {
             var pt = new GPSPoint
             {
