@@ -197,10 +197,11 @@ public class CameraPage : MonoBehaviour
         var list = JsonUtility.FromJson<ModelInfoList>(wrapped);
 
         // 3) For each ModelInfo, find the matching GPSPoint and
-        var sortedResults = list.results.OrderBy(info =>
-        {
-            return (userLat, userLon, info.latitude, info.longitude, 'K');
-        }).ToList();
+        var sortedResults = list.results.OrderBy(info => Distance(userLat,
+                              userLon,
+                              info.latitude,
+                              info.longitude,
+                              'K')).ToList();
 
         points.Clear();
 
