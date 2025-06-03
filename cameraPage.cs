@@ -11,7 +11,6 @@ using UnityEngine.XR.ARSubsystems;
 using TMPro;
 using Newtonsoft.Json;
 
-
 public class CameraPage : MonoBehaviour
 {
     [Header("UI Controls")]
@@ -38,7 +37,6 @@ public class CameraPage : MonoBehaviour
         public double longitude;
     }
     // --------- ↑ Backend link for the 3d models ↑ ---------
-
 
     [SerializeField] ARSession m_Session;
     [SerializeField] private ARRaycastManager raycastManager;
@@ -83,7 +81,6 @@ public class CameraPage : MonoBehaviour
 
     [Tooltip("One entry per house: Gps coordonates + model")]
     public List<GPSPoint> points = new List<GPSPoint>();
-
 
     // ----------------------------- Start function -----------------------------
     IEnumerator Start()
@@ -171,10 +168,11 @@ public class CameraPage : MonoBehaviour
             debugTxt.text += "\nUsing device GPS origin";
         }
 
-        // --- Kick off your Fetch & Cache pipeline ---
+        // --- Kick off your FetchAndCache pipeline (only fills 'points') ---
         StartCoroutine(FetchAndCacheModels());
     }
 
+    // ----------------------------- Fetch & populate only -----------------------------
     IEnumerator FetchAndCacheModels()
     {
         double userLat = referenceLat;
@@ -195,34 +193,42 @@ public class CameraPage : MonoBehaviour
         string wrapped = "{\"results\":" + req.downloadHandler.text + "}";
         var list = JsonUtility.FromJson<ModelInfoList>(wrapped);
 
-        // 3) For each ModelInfo, find the matching GPSPoint and
-        var sortedResults = list.results.OrderBy(info => Distance(userLat,
-                              userLon,
-                              info.latitude,
-                              info.longitude,
-                              'K')).ToList();
+        // 3) Sort by distance (km) from the user’s starting GPS location
+        var sortedResults = list.results
+            .OrderBy(info => Distance(
+                                 userLat,
+                                 userLon,
+                                 info.latitude,
+                                 info.longitude,
+                                 'K'))
+            .ToList();
 
         points.Clear();
 
-        foreach(var  info in sortedResults)
+        // 4) Populate points WITHOUT starting any downloads
+        foreach (var info in sortedResults)
         {
             var pt = new GPSPoint
             {
                 info = info,
                 latitude = info.latitude,
                 longitude = info.longitude,
-                placed = false
+                placed = false,
+                downloadedPrefab = null,
+                instance = null,
+                baseY = 0f
             };
             points.Add(pt);
-            StartCoroutine(DownloadAndCachePrefab(info, pt));
         }
     }
 
-    IEnumerator DownloadAndCachePrefab(ModelInfo info, GPSPoint pt)
+    // ----------------------------- Lazy‐download & place -----------------------------
+    IEnumerator DownloadAndPlacePrefab(GPSPoint pt)
     {
-        debugTxt.text = $"Downloading {info.name}…";
+        debugTxt.text = $"Downloading {pt.info.name}…";
 
-        var bundleReq = UnityWebRequestAssetBundle.GetAssetBundle(info.file);
+        // 1) Download the AssetBundle
+        var bundleReq = UnityWebRequestAssetBundle.GetAssetBundle(pt.info.file);
         yield return bundleReq.SendWebRequest();
         if (bundleReq.result != UnityWebRequest.Result.Success)
         {
@@ -230,62 +236,50 @@ public class CameraPage : MonoBehaviour
             yield break;
         }
 
+        // 2) Extract the prefab from the bundle
         var bundle = DownloadHandlerAssetBundle.GetContent(bundleReq);
         var assetNames = bundle.GetAllAssetNames();
         var prefab = bundle.LoadAsset<GameObject>(assetNames[0]);
+        bundle.Unload(false);
+
+        // 3) Cache it in the GPSPoint
         pt.downloadedPrefab = prefab;
+        debugTxt.text = $"{pt.info.name} cached";
 
-        bundle.Unload(false);
-        debugTxt.text = $"{info.name} cached";
+        // 4) Immediately compute camera‐relative position and instantiate
+        //    (Same formulas used in Update())
+        var curr = Input.location.lastData;
+        double currLat = curr.latitude;
+        double currLon = curr.longitude;
+        Vector3 cameraWorldPos = Camera.main.transform.position;
+        float cameraYawDeg = Camera.main.transform.eulerAngles.y;
 
+        float northMeters = (float)((pt.latitude - _originLat) * 110540f);
+        float eastMeters = (float)((pt.longitude - _originLon) * 111320f *
+                                    Mathf.Cos((float)(_originLat * Mathf.Deg2Rad)));
 
+        Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
+        Vector3 rotatedOffset = Quaternion.Euler(0f, cameraYawDeg, 0f) * geoOffset;
+
+        Vector3 spawnPos = cameraWorldPos
+                          + rotatedOffset
+                          + Vector3.up * (verticalOffset + manualYOffset);
+
+        GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
+        pt.instance = go;
+        pt.baseY = spawnPos.y - manualYOffset;
+        pt.placed = true;
+
+        debugTxt.text = $"Placed {pt.info.name} at Y={spawnPos.y:F2}";
     }
-    // ----------------------------- end of Start function -----------------------------
-
-    // ----------------------------- Download and Instantiate -----------------------------
-
-    IEnumerator DownloadAndInstantiate(ModelInfo info, ARRaycastHit hit)
-    {
-        // 1) Download bundle
-        var uwr = UnityWebRequestAssetBundle.GetAssetBundle(info.file);
-        yield return uwr.SendWebRequest();
-        if (uwr.result != UnityWebRequest.Result.Success)
-        {
-            debugTxt.text = $"Bundle download failed: {uwr.error}";
-            yield break;
-        }
-
-        // 2) Load prefab
-        var bundle = DownloadHandlerAssetBundle.GetContent(uwr);
-        var assetNames = bundle.GetAllAssetNames();
-        var prefab = bundle.LoadAsset<GameObject>(assetNames[0]);
-        bundle.Unload(false);
-
-        // 3) Attach anchor to the plane you hit
-        ARPlane plane = planeManager.GetPlane(hit.trackableId);
-        ARAnchor anchor = (plane != null)
-            ? anchorManager.AttachAnchor(plane, hit.pose)
-            : null;
-
-        // 4) Instantiate under that anchor (or directly at pose)
-        if (anchor != null)
-            Instantiate(prefab, anchor.transform);
-        else
-            Instantiate(prefab, hit.pose.position, hit.pose.rotation);
-    }
-
-
-    // ----------------------------- end of Download and Instantiate -----------------------------
 
     // ----------------------------- return to main page -----------------------------
     public void Return()
     {
         SceneManager.LoadScene("MainPage");
     }
-    // ----------------------------- end of return to main page -----------------------------
 
-
-    // ----------------------------- Update function -----------------------------
+    // ----------------------------- Update function (lazy loader) -----------------------------
     void Update()
     {
         DetectSwipe();
@@ -299,57 +293,43 @@ public class CameraPage : MonoBehaviour
         double currLat = curr.latitude;
         double currLon = curr.longitude;
 
-        // --- Replace if user walked 500m away ---
+        // --- Rebase origin if user walked >500 m from previous (_originLat,_originLon) ---
         double distFromOriginKm = Distance(_originLat, _originLon, currLat, currLon, 'K');
-        if(distFromOriginKm * 1000.0 > 500.0f)
+        if (distFromOriginKm * 1000.0 > 500.0f)
         {
             _originLat = currLat;
             _originLon = currLon;
             Debug.Log($"Rebased origin: {_originLat:F6}, {_originLon:F6}");
+            // Optionally, you could destroy & respawn existing objects here if needed.
         }
 
-        // --- Get AR Camera's world position
+        // --- Get AR Camera's world position & yaw ---
         Vector3 cameraWorldPos = Camera.main.transform.position;
-        float cameraYawDegrees = Camera.main.transform.eulerAngles.y;
+        float cameraYawDeg = Camera.main.transform.eulerAngles.y;
 
-        foreach(var pt in points)
+        foreach (var pt in points)
         {
-            if (pt.placed || pt.downloadedPrefab == null) continue;
+            // 1) Skip any already placed
+            if (pt.placed)
+                continue;
 
-            // -- Check distance --
+            // 2) Check distance (meters) from current location to this point’s GPS
             double distKm = Distance(currLat, currLon, pt.latitude, pt.longitude, 'K');
             float distM = (float)(distKm * 1000.0);
-            if (distM > 50f) continue;
+            if (distM > 50f)
+                continue; // still too far: no download or spawn yet
 
-            // -- Compute cardinal points --
-            float northMeters = (float)((pt.latitude - _originLat) * 110540f);
-            float eastMeters = (float)((pt.longitude - _originLon) * 111320f * Mathf.Cos((float)(_originLat * Mathf.Deg2Rad)));
-
-            Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
-
-            // -- Rotate camera --
-            Vector3 rotatedOffset = Quaternion.Euler(0f, cameraYawDegrees, 0f) * geoOffset;
-
-            // -- Build final spawn position --
-            Vector3 spawnPos = cameraWorldPos + rotatedOffset + Vector3.up * (verticalOffset + manualYOffset);
-
-            // -- Instantiate at SpawnPos -- 
-            GameObject go = Instantiate(pt.downloadedPrefab, spawnPos, Quaternion.identity);
-
-            pt.instance = go;
-            pt.baseY = spawnPos.y - manualYOffset;
-            pt.placed = true;
-            debugTxt.text = $"Placed {pt.info.name} ({distM:F1} m away) at Y={spawnPos.y:F2}";
-
+            // 3) If we get here, user is within 50 m AND pt.placed == false
+            if (pt.downloadedPrefab == null)
+            {
+                // a) Not downloaded → start the lazy‐download‐and‐place coroutine
+                StartCoroutine(DownloadAndPlacePrefab(pt));
+            }
+            // We do NOT need an 'else' here, because DownloadAndPlacePrefab immediately sets pt.placed=true.
+            // Breaking out ensures only one new download per frame—remove 'break' if you want multiple.
+            break;
         }
-
     }
-
-
-
-
-    // ----------------------------- end of Update function -----------------------------
-
 
     // ----------------------------- Offset change function -----------------------------
     public void OnManualYOffsetChanged(float newOffset)
@@ -359,7 +339,8 @@ public class CameraPage : MonoBehaviour
 
         foreach (var pt in points)
         {
-            if (!pt.placed || pt.instance == null) continue;
+            if (!pt.placed || pt.instance == null)
+                continue;
 
             Vector3 p = pt.instance.transform.position;
             p.y = pt.baseY + manualYOffset;
@@ -367,21 +348,19 @@ public class CameraPage : MonoBehaviour
             Debug.Log($"Moved instance to Y = {p.y:F2}");
         }
     }
-    // ----------------------------- end of Offset change function -----------------------------
-
 
     // ----------------------------- CalibrateGround function -----------------------------
     public void CalibrateGround()
     {
         referenceAltitude = Input.location.lastData.altitude;
         calibrateTxt.text = $"Ground calibrated at {referenceAltitude:F1} m";
-
     }
 
     // ----------------------------- UpdateDebugDisplay function -----------------------------
     private void UpdateDebugDisplay()
     {
-        if (!gps_ok || points.Count == 0) return;
+        if (!gps_ok || points.Count == 0)
+            return;
 
         double currLat = Input.location.lastData.latitude;
         double currLon = Input.location.lastData.longitude;
@@ -392,19 +371,18 @@ public class CameraPage : MonoBehaviour
         {
             double d = Distance(currLat, currLon, pt.latitude, pt.longitude, 'K') * 1000.0;
             sb.AppendFormat(
-            "{0:F6},{1:F6}: {2:F1} m{3}\n",
-            pt.latitude,
-            pt.longitude,
-            d,
-            pt.placed ? " (placed)" : ""
+                "{0:F6},{1:F6}: {2:F1} m{3}\n",
+                pt.latitude,
+                pt.longitude,
+                d,
+                pt.placed ? " (placed)" : ""
             );
         }
 
         debugTxt.text = sb.ToString();
     }
 
-
-    // ---------------- Detect the swipe of the user on the camera scene ---------------
+    // ----------------------------- Detect the swipe of the user on the camera scene ---------------
     void DetectSwipe()
     {
         if (Input.touchCount > 0)
@@ -446,11 +424,8 @@ public class CameraPage : MonoBehaviour
             }
         }
     }
-    // ---------------- End of swipe dection ----------------
 
-
-
-    // ---------------- GPS Localisation ----------------
+    // ---------------- GPS Localisation helper ----------------
     private Vector3 GPSLocationToUnityPosition(double targetLat, double targetLon, double targetAlt)
     {
         double latRad = referenceLat * Mathf.Deg2Rad;
@@ -478,7 +453,9 @@ public class CameraPage : MonoBehaviour
         else
         {
             double theta = lon1 - lon2;
-            double dist = Math.Sin(deg2rad(lat1)) * Math.Sin(deg2rad(lat2)) + Math.Cos(deg2rad(lat1)) * Math.Cos(deg2rad(lat2)) * Math.Cos(deg2rad(theta));
+            double dist = Math.Sin(deg2rad(lat1)) * Math.Sin(deg2rad(lat2)) +
+                          Math.Cos(deg2rad(lat1)) * Math.Cos(deg2rad(lat2)) *
+                          Math.Cos(deg2rad(theta));
             dist = Math.Acos(dist);
             dist = rad2deg(dist);
             dist = dist * 60 * 1.1515;
@@ -490,7 +467,7 @@ public class CameraPage : MonoBehaviour
             {
                 dist = dist * 0.8684;
             }
-            return (dist);
+            return dist;
         }
     }
 
@@ -504,7 +481,6 @@ public class CameraPage : MonoBehaviour
     {
         return (rad / Math.PI * 180.0);
     }
-
 }
 
 public class GPSLoc
