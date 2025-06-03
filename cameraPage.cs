@@ -227,7 +227,7 @@ public class CameraPage : MonoBehaviour
     {
         debugTxt.text = $"Downloading {pt.info.name}…";
 
-        // 1) Download the AssetBundle
+        // 1) Download the AssetBundle asynchronously
         var bundleReq = UnityWebRequestAssetBundle.GetAssetBundle(pt.info.file);
         yield return bundleReq.SendWebRequest();
         if (bundleReq.result != UnityWebRequest.Result.Success)
@@ -236,44 +236,65 @@ public class CameraPage : MonoBehaviour
             yield break;
         }
 
-        // 2) Extract the prefab from the bundle
-        var bundle = DownloadHandlerAssetBundle.GetContent(bundleReq);
-        var assetNames = bundle.GetAllAssetNames();
-        var prefab = bundle.LoadAsset<GameObject>(assetNames[0]);
-        bundle.Unload(false);
+        // 2) Get the AssetBundle reference
+        AssetBundle bundle = DownloadHandlerAssetBundle.GetContent(bundleReq);
+        if (bundle == null)
+        {
+            Debug.LogError($"Failed to load AssetBundle from {pt.info.file}");
+            yield break;
+        }
 
-        // 3) Cache it in the GPSPoint
+        // 3) Kick off an async load of the prefab inside the bundle
+        //    (Use the first asset name; you could also hardcode its exact path if known)
+        string assetName = bundle.GetAllAssetNames()[0];
+        var loadRequest = bundle.LoadAssetAsync<GameObject>(assetName);
+
+        // 4) Wait until LoadAssetAsync is done; this yields a few frames so the camera won't freeze
+        yield return loadRequest;
+
+        // 5) Extract the loaded prefab
+        GameObject prefab = loadRequest.asset as GameObject;
+        if (prefab == null)
+        {
+            Debug.LogError($"Failed to load prefab '{assetName}' from bundle");
+            bundle.Unload(false);
+            yield break;
+        }
+
+        // 6) Cache the prefab on the GPSPoint so we don’t re-download if we re-calibrate
         pt.downloadedPrefab = prefab;
         debugTxt.text = $"{pt.info.name} cached";
 
-        // 4) Immediately compute camera‐relative position and instantiate
-        //    (Same formulas used in Update())
-        var curr = Input.location.lastData;
+        // 7) Compute camera‐relative “groundY” and rotate north/east offset
         Vector3 cameraWorldPos = Camera.main.transform.position;
         float cameraYawDeg = Camera.main.transform.eulerAngles.y;
 
         float northMeters = (float)((pt.latitude - _originLat) * 110540f);
         float eastMeters = (float)((pt.longitude - _originLon) * 111320f *
                                     Mathf.Cos((float)(_originLat * Mathf.Deg2Rad)));
-
         Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
         Vector3 rotatedOffset = Quaternion.Euler(0f, cameraYawDeg, 0f) * geoOffset;
 
+        // 8) Determine “groundY” once (camera Y + verticalOffset), then add manualYOffset
         float groundY = cameraWorldPos.y + verticalOffset;
-
         Vector3 spawnPos = new Vector3(
             cameraWorldPos.x + rotatedOffset.x,
             groundY + manualYOffset,
             cameraWorldPos.z + rotatedOffset.z
         );
 
+        // 9) Instantiate the prefab at spawnPos, then record baseY
         GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
         pt.instance = go;
         pt.baseY = groundY;
         pt.placed = true;
 
         debugTxt.text = $"Placed {pt.info.name} at Y={spawnPos.y:F2}";
+
+        // 10) Unload the raw AssetBundle memory but keep the asset loaded
+        bundle.Unload(false);
     }
+
 
     // ----------------------------- return to main page -----------------------------
     public void Return()
@@ -311,24 +332,20 @@ public class CameraPage : MonoBehaviour
 
         foreach (var pt in points)
         {
-            // 1) Skip any already placed
+            // -- Skip any already placed --
             if (pt.placed)
                 continue;
 
-            // 2) Check distance (meters) from current location to this point’s GPS
+            // -- Check distance (meters) from current location to this point’s GPS --
             double distKm = Distance(currLat, currLon, pt.latitude, pt.longitude, 'K');
             float distM = (float)(distKm * 1000.0);
             if (distM > 50f)
-                continue; // still too far: no download or spawn yet
-
-            // 3) If we get here, user is within 50 m AND pt.placed == false
+                continue; 
+            // -- If we get here, user is within 50 m AND pt.placed == false --
             if (pt.downloadedPrefab == null)
             {
-                // a) Not downloaded → start the lazy‐download‐and‐place coroutine
                 StartCoroutine(DownloadAndPlacePrefab(pt));
             }
-            // We do NOT need an 'else' here, because DownloadAndPlacePrefab immediately sets pt.placed=true.
-            // Breaking out ensures only one new download per frame—remove 'break' if you want multiple.
             break;
         }
     }
