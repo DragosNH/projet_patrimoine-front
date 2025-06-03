@@ -170,7 +170,7 @@ public class CameraPage : MonoBehaviour
             debugTxt.text += "\nUsing device GPS origin";
         }
 
-        // --- Kick off your FetchAndCache pipeline (only fills 'points') ---
+        // --- Kick off your FetchAndCache pipeline ---
         StartCoroutine(FetchAndCacheModels());
     }
 
@@ -180,7 +180,7 @@ public class CameraPage : MonoBehaviour
         double userLat = referenceLat;
         double userLon = referenceLon;
 
-        // 1) Fetch the JSON list
+        // -- Fetch the JSON list --
         var req = UnityWebRequest.Get(apiUrl);
         req.SetRequestHeader("Authorization",
             "Bearer " + PlayerPrefs.GetString("access_token"));
@@ -191,11 +191,11 @@ public class CameraPage : MonoBehaviour
             yield break;
         }
 
-        // 2) Parse into ModelInfoList
+        // -- Parse into ModelInfoList --
         string wrapped = "{\"results\":" + req.downloadHandler.text + "}";
         var list = JsonUtility.FromJson<ModelInfoList>(wrapped);
 
-        // 3) Sort by distance (km) from the user’s starting GPS location
+        // -- Sort by distance (km) from the user’s starting GPS location --
         var sortedResults = list.results
             .OrderBy(info => Distance(
                                  userLat,
@@ -207,7 +207,7 @@ public class CameraPage : MonoBehaviour
 
         points.Clear();
 
-        // 4) Populate points WITHOUT starting any downloads
+        // -- Populate points WITHOUT starting any downloads --
         foreach (var info in sortedResults)
         {
             var pt = new GPSPoint
@@ -229,7 +229,7 @@ public class CameraPage : MonoBehaviour
     {
         debugTxt.text = $"Downloading {pt.info.name}…";
 
-        // 1) Download the AssetBundle asynchronously
+        // -- Download the AssetBundle asynchronously --
         var bundleReq = UnityWebRequestAssetBundle.GetAssetBundle(pt.info.file);
         yield return bundleReq.SendWebRequest();
         if (bundleReq.result != UnityWebRequest.Result.Success)
@@ -239,7 +239,7 @@ public class CameraPage : MonoBehaviour
             yield break;
         }
 
-        // 2) Get the AssetBundle reference
+        // -- Get the AssetBundle reference --
         AssetBundle bundle = DownloadHandlerAssetBundle.GetContent(bundleReq);
         if (bundle == null)
         {
@@ -248,14 +248,14 @@ public class CameraPage : MonoBehaviour
             yield break;
         }
 
-        // 3) Kick off an async load of the prefab inside the bundle
+        // -- Kick off an async load of the prefab inside the bundle --
         string assetName = bundle.GetAllAssetNames()[0];
         var loadRequest = bundle.LoadAssetAsync<GameObject>(assetName);
 
-        // 4) Wait until LoadAssetAsync is done; this yields a few frames so the camera won't freeze
+        // -- Wait until LoadAssetAsync is done; this yields a few frames so the camera won't freeze --
         yield return loadRequest;
 
-        // 5) Extract the loaded prefab
+        // -- Extract the loaded prefab --
         GameObject prefab = loadRequest.asset as GameObject;
         if (prefab == null)
         {
@@ -265,11 +265,11 @@ public class CameraPage : MonoBehaviour
             yield break;
         }
 
-        // 6) Cache the prefab on the GPSPoint so we don’t re-download if we re-calibrate
+        // -- Cache the prefab on the GPSPoint so we don’t re-download if we re-calibrate --
         pt.downloadedPrefab = prefab;
         debugTxt.text = $"{pt.info.name} cached";
 
-        // 7) Compute camera‐relative “groundY” and rotate north/east offset
+        // -- Compute camera‐relative “groundY” and rotate north/east offset --
         Vector3 cameraWorldPos = Camera.main.transform.position;
         float cameraYawDeg = Camera.main.transform.eulerAngles.y;
 
@@ -279,7 +279,7 @@ public class CameraPage : MonoBehaviour
         Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
         Vector3 rotatedOffset = Quaternion.Euler(0f, cameraYawDeg, 0f) * geoOffset;
 
-        // 8) Determine “groundY” once (camera Y + verticalOffset), then add manualYOffset
+        // -- Determine “groundY” once (camera Y + verticalOffset), then add manualYOffset --
         float groundY = cameraWorldPos.y + verticalOffset;
         Vector3 spawnPos = new Vector3(
             cameraWorldPos.x + rotatedOffset.x,
@@ -287,7 +287,7 @@ public class CameraPage : MonoBehaviour
             cameraWorldPos.z + rotatedOffset.z
         );
 
-        // 9) Instantiate the prefab at spawnPos, then record baseY
+        // -- Instantiate the prefab at spawnPos, then record baseY --
         GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
         pt.instance = go;
         pt.baseY = groundY;
@@ -295,7 +295,7 @@ public class CameraPage : MonoBehaviour
 
         debugTxt.text = $"Placed {pt.info.name} at Y={spawnPos.y:F2}";
 
-        // 10) Unload the raw AssetBundle memory but keep the asset loaded
+        // -- Unload the raw AssetBundle memory but keep the asset loaded --
         bundle.Unload(false);
 
         pt.isDownloading = false;
