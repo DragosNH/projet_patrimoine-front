@@ -249,8 +249,6 @@ public class CameraPage : MonoBehaviour
         // 4) Immediately compute camera‐relative position and instantiate
         //    (Same formulas used in Update())
         var curr = Input.location.lastData;
-        double currLat = curr.latitude;
-        double currLon = curr.longitude;
         Vector3 cameraWorldPos = Camera.main.transform.position;
         float cameraYawDeg = Camera.main.transform.eulerAngles.y;
 
@@ -261,13 +259,17 @@ public class CameraPage : MonoBehaviour
         Vector3 geoOffset = new Vector3(eastMeters, 0f, northMeters);
         Vector3 rotatedOffset = Quaternion.Euler(0f, cameraYawDeg, 0f) * geoOffset;
 
-        Vector3 spawnPos = cameraWorldPos
-                          + rotatedOffset
-                          + Vector3.up * (verticalOffset + manualYOffset);
+        float groundY = cameraWorldPos.y + verticalOffset;
+
+        Vector3 spawnPos = new Vector3(
+            cameraWorldPos.x + rotatedOffset.x,
+            groundY + manualYOffset,
+            cameraWorldPos.z + rotatedOffset.z
+        );
 
         GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
         pt.instance = go;
-        pt.baseY = spawnPos.y - manualYOffset;
+        pt.baseY = groundY;
         pt.placed = true;
 
         debugTxt.text = $"Placed {pt.info.name} at Y={spawnPos.y:F2}";
@@ -334,18 +336,21 @@ public class CameraPage : MonoBehaviour
     // ----------------------------- Offset change function -----------------------------
     public void OnManualYOffsetChanged(float newOffset)
     {
+        Debug.Log($"------ Slider fired! manualYOffset = {manualYOffset}");
         manualYOffset = newOffset;
-        Debug.Log($"Slider fired! manualYOffset = {manualYOffset}");
 
         foreach (var pt in points)
         {
+            Debug.Log($"  → Checking point {pt.info.name}: placed={pt.placed}, instance={(pt.instance != null)}");
             if (!pt.placed || pt.instance == null)
                 continue;
+
+            Debug.Log($"     before move: instance Y = {pt.instance.transform.position.y:F2}, baseY = {pt.baseY:F2}");
 
             Vector3 p = pt.instance.transform.position;
             p.y = pt.baseY + manualYOffset;
             pt.instance.transform.position = p;
-            Debug.Log($"Moved instance to Y = {p.y:F2}");
+            Debug.Log($"------ Moved instance to Y = {p.y:F2}");
         }
     }
 
@@ -354,6 +359,21 @@ public class CameraPage : MonoBehaviour
     {
         referenceAltitude = Input.location.lastData.altitude;
         calibrateTxt.text = $"Ground calibrated at {referenceAltitude:F1} m";
+
+        foreach(var pt in points)
+        {
+            if(pt.instance != null)
+            {
+                Destroy(pt.instance);
+                pt.instance = null;
+            }
+
+            pt.downloadedPrefab = null;
+
+            pt.placed = false;
+
+            //pt.baseY = 0f;
+        }
     }
 
     // ----------------------------- UpdateDebugDisplay function -----------------------------
