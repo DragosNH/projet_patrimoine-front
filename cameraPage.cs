@@ -62,6 +62,8 @@ public class CameraPage : MonoBehaviour
         [HideInInspector] public bool placed;
         [HideInInspector] public GameObject instance;
         [HideInInspector] public float baseY;
+
+        [HideInInspector] public bool isDownloading;
     }
 
     private Vector2 startTouchPosition;
@@ -233,6 +235,7 @@ public class CameraPage : MonoBehaviour
         if (bundleReq.result != UnityWebRequest.Result.Success)
         {
             Debug.LogError($"Download failed: {bundleReq.error}");
+            pt.isDownloading = false;
             yield break;
         }
 
@@ -241,11 +244,11 @@ public class CameraPage : MonoBehaviour
         if (bundle == null)
         {
             Debug.LogError($"Failed to load AssetBundle from {pt.info.file}");
+            pt.isDownloading = false;
             yield break;
         }
 
         // 3) Kick off an async load of the prefab inside the bundle
-        //    (Use the first asset name; you could also hardcode its exact path if known)
         string assetName = bundle.GetAllAssetNames()[0];
         var loadRequest = bundle.LoadAssetAsync<GameObject>(assetName);
 
@@ -258,6 +261,7 @@ public class CameraPage : MonoBehaviour
         {
             Debug.LogError($"Failed to load prefab '{assetName}' from bundle");
             bundle.Unload(false);
+            pt.isDownloading = false;
             yield break;
         }
 
@@ -293,6 +297,8 @@ public class CameraPage : MonoBehaviour
 
         // 10) Unload the raw AssetBundle memory but keep the asset loaded
         bundle.Unload(false);
+
+        pt.isDownloading = false;
     }
 
 
@@ -323,7 +329,6 @@ public class CameraPage : MonoBehaviour
             _originLat = currLat;
             _originLon = currLon;
             Debug.Log($"Rebased origin: {_originLat:F6}, {_originLon:F6}");
-            // Optionally, you could destroy & respawn existing objects here if needed.
         }
 
         // --- Get AR Camera's world position & yaw ---
@@ -333,7 +338,7 @@ public class CameraPage : MonoBehaviour
         foreach (var pt in points)
         {
             // -- Skip any already placed --
-            if (pt.placed)
+            if (pt.placed || pt.isDownloading)
                 continue;
 
             // -- Check distance (meters) from current location to this point’s GPS --
@@ -341,9 +346,11 @@ public class CameraPage : MonoBehaviour
             float distM = (float)(distKm * 1000.0);
             if (distM > 50f)
                 continue; 
+
             // -- If we get here, user is within 50 m AND pt.placed == false --
             if (pt.downloadedPrefab == null)
             {
+                pt.isDownloading = true;
                 StartCoroutine(DownloadAndPlacePrefab(pt));
             }
             break;
@@ -358,11 +365,8 @@ public class CameraPage : MonoBehaviour
 
         foreach (var pt in points)
         {
-            Debug.Log($"  → Checking point {pt.info.name}: placed={pt.placed}, instance={(pt.instance != null)}");
             if (!pt.placed || pt.instance == null)
                 continue;
-
-            Debug.Log($"     before move: instance Y = {pt.instance.transform.position.y:F2}, baseY = {pt.baseY:F2}");
 
             Vector3 p = pt.instance.transform.position;
             p.y = pt.baseY + manualYOffset;
@@ -386,9 +390,8 @@ public class CameraPage : MonoBehaviour
             }
 
             pt.downloadedPrefab = null;
-
             pt.placed = false;
-
+            pt.isDownloading = false;
             //pt.baseY = 0f;
         }
     }
