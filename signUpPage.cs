@@ -49,6 +49,12 @@ public class SignUp : MonoBehaviour
 
     // -- Text color --
     public TextMeshProUGUI[] texts;
+    public TextMeshProUGUI termsLabel;
+
+
+    // -- Terms and conditions area --
+    public Toggle agreeTermsToggle;
+    public TextMeshProUGUI agreeErrorText;
 
     // --- Sign up Url ---
     string apiUrl = NetworkConfig.ServerIP + "/api/signup/";
@@ -97,8 +103,10 @@ public class SignUp : MonoBehaviour
         // - Menu Popup -
         menuPopup.GetComponent<Image>().sprite = isDarkMode ? darkPopup : lightPopup;
 
+        termsLabel.color = isDarkMode ? Color.white : Color.black;
+
         // -- Texts --
-        foreach(TextMeshProUGUI txt in texts)
+        foreach (TextMeshProUGUI txt in texts)
         {
             txt.color = isDarkMode ? Color.white : Color.black;
         }
@@ -120,8 +128,22 @@ public class SignUp : MonoBehaviour
 
     public void OnSignUpClick()
     {
-        loadingIndicator.SetActive(true);
-        loadingText.gameObject.SetActive(true);
+
+        if (!agreeTermsToggle.isOn)
+        {
+            Debug.LogWarning("User must agree to the Terms and Conditions.");
+
+            if(agreeErrorText != null)
+            {
+                agreeErrorText.text = "Vous devez accepter les conditions générales pour créer un compte.";
+                agreeErrorText.gameObject.SetActive(true);
+            }
+
+            loadingIndicator.SetActive(false);
+            loadingText.gameObject.SetActive(false);
+            return;
+        }
+
         loadingText.text = "En cours de création...";
         StartCoroutine(SignUpCoroutine());
     }
