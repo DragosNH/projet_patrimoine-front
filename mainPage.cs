@@ -54,6 +54,9 @@ public class MainPage: MonoBehaviour
     // -- Text Color --
     public TextMeshProUGUI[] texts;
 
+    string apiUrl = NetworkConfig.ServerIP + "/api/logout/";
+
+
     void Start()
     {
         /// Load saved theme
@@ -153,32 +156,58 @@ public class MainPage: MonoBehaviour
 
     IEnumerator LogoutRequest()
     {
+        //string refresh = PlayerPrefs.GetString("refresh_token");
+
+        //UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:8000/api/logout/", "POST");
+        //byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes("{\"refresh\":\"" + refresh + "\"}");
+        //request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+        //request.downloadHandler = new DownloadHandlerBuffer();
+        //request.SetRequestHeader("Content-Type", "application/json");
+
+        //yield return request.SendWebRequest();
+
+        //if (request.result != UnityWebRequest.Result.Success)
+        //{
+        //    Debug.LogWarning("Logout failed: " + request.error);
+        //}
+        //else
+        //{
+        //    Debug.Log("Logged out successfully: " + request.downloadHandler.text);
+        //}
+
+        //// Clear tokens
+        //PlayerPrefs.DeleteKey("access_token");
+        //PlayerPrefs.DeleteKey("refresh_token");
+        //PlayerPrefs.Save();
+
+        //// Redirect to login scene
+        //SceneManager.LoadScene("Login");
+
         string refresh = PlayerPrefs.GetString("refresh_token");
 
-        UnityWebRequest request = new UnityWebRequest("http://127.0.0.1:8000/api/logout/", "POST");
+        UnityWebRequest request = new UnityWebRequest(apiUrl, "POST");
         byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes("{\"refresh\":\"" + refresh + "\"}");
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
 
-        yield return request.SendWebRequest();
-
-        if (request.result != UnityWebRequest.Result.Success)
+        yield return RequestManager.SendAuthorizedRequest(request, (response) =>
         {
-            Debug.LogWarning("Logout failed: " + request.error);
-        }
-        else
-        {
-            Debug.Log("Logged out successfully: " + request.downloadHandler.text);
-        }
+            if (response.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning("Logout failed: " + response.error);
+            }
+            else
+            {
+                Debug.Log("Logged out successfully: " + response.downloadHandler.text);
+            }
 
-        // Clear tokens
-        PlayerPrefs.DeleteKey("access_token");
-        PlayerPrefs.DeleteKey("refresh_token");
-        PlayerPrefs.Save();
+            PlayerPrefs.DeleteKey("access_token");
+            PlayerPrefs.DeleteKey("refresh_token");
+            PlayerPrefs.Save();
 
-        // Redirect to login scene
-        SceneManager.LoadScene("Login");
+            SceneManager.LoadScene("Login");
+        });
     }
 }
 

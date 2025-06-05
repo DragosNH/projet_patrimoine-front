@@ -5,6 +5,7 @@ using UnityEngine.Networking;
 
 public class RequestManager : MonoBehaviour
 {
+
     private static string refreshUrl = NetworkConfig.ServerIP + "/api/token/refresh/";
 
     public static IEnumerator SendAuthorizedRequest(UnityWebRequest request, Action<UnityWebRequest> callback)
