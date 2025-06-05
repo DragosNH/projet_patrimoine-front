@@ -169,12 +169,19 @@ public class ProfileScecne: MonoBehaviour
         {
             UserProfile user = JsonUtility.FromJson<UserProfile>(request.downloadHandler.text);
 
-            firstNameText.text = user.first_name;
-            lastNameText.text = user.last_name;
+            firstNameText.text = Capitalize(user.first_name);
+            lastNameText.text = Capitalize(user.last_name);
             usernameText.text = user.username;
             emailText.text = user.email;
             Debug.Log("User data: " + request.downloadHandler.text);
         }
+    }
+
+    // ---- Capitalise the first letter ----
+    private string Capitalize(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "";
+        return char.ToUpper(input[0]) + input.Substring(1).ToLower();
     }
 
 

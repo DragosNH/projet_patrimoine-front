@@ -21,7 +21,7 @@ public class AutoLoginManager : MonoBehaviour
         // No refresh token saved → redirect to login
         if (string.IsNullOrEmpty(refreshToken))
         {
-            SceneManager.LoadScene("Login");
+            SceneManager.LoadScene("MainLogin");
             yield break;
         }
 
@@ -49,7 +49,7 @@ public class AutoLoginManager : MonoBehaviour
         else
         {
             Debug.LogWarning("Token refresh failed. Redirecting to LoginPage...");
-            SceneManager.LoadScene("Login");
+            SceneManager.LoadScene("MainLogin");
         }
     }
 
