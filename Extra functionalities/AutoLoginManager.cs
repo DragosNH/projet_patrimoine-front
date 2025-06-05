@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Networking;
 using System.Collections;
@@ -16,7 +16,7 @@ public class AutoLoginManager : MonoBehaviour
     {
         string refreshToken = PlayerPrefs.GetString("refresh_token", "");
 
-        // If there is not a refresh token redirect the user to the loginpage 
+        // No refresh token saved → redirect to login
         if (string.IsNullOrEmpty(refreshToken))
         {
             SceneManager.LoadScene("LoginPage");
@@ -24,7 +24,7 @@ public class AutoLoginManager : MonoBehaviour
         }
 
         // Prepare request to refresh access token
-        RefreshData data = new RefreshData { refsh = refreshToken };
+        RefreshData data = new RefreshData { refresh = refreshToken };
         string jsonData = JsonUtility.ToJson(data);
 
         UnityWebRequest request = new UnityWebRequest(refreshUrl, "POST");
@@ -35,7 +35,7 @@ public class AutoLoginManager : MonoBehaviour
 
         yield return request.SendWebRequest();
 
-        if(request.result == UnityWebRequest.Result.Success)
+        if (request.result == UnityWebRequest.Result.Success)
         {
             TokenResponse newTokens = JsonUtility.FromJson<TokenResponse>(request.downloadHandler.text);
             PlayerPrefs.SetString("access_token", newTokens.access);
@@ -44,24 +44,23 @@ public class AutoLoginManager : MonoBehaviour
             Debug.Log("Access token refreshed. Redirecting to MainPage...");
             SceneManager.LoadScene("MainPage");
         }
-        else 
+        else
         {
             Debug.LogWarning("Token refresh failed. Redirecting to LoginPage...");
             SceneManager.LoadScene("LoginPage");
         }
-
     }
-}
 
-[System.Serializable]
-public class RefreshData
-{
-    public string refresh;
-}
+    [System.Serializable]
+    public class RefreshData
+    {
+        public string refresh;
+    }
 
-[System.Serializable]
-public class TokenResponse
-{ 
-    public string access;
-    public string refresh;
+    [System.Serializable]
+    public class TokenResponse
+    {
+        public string access;
+        public string refresh; // Optional; will be null unless rotation is enabled
+    }
 }
