@@ -10,11 +10,13 @@ public class AutoLoginManager : MonoBehaviour
     void Start()
     {
         StartCoroutine(CheckLoginStatus());
+        Debug.Log("-----------RunningAutoLoginManager script is running.");
     }
 
     IEnumerator CheckLoginStatus()
     {
         string refreshToken = PlayerPrefs.GetString("refresh_token", "");
+        Debug.Log("AutoLoginManager found refresh_token: " + refreshToken);
 
         // No refresh token saved → redirect to login
         if (string.IsNullOrEmpty(refreshToken))

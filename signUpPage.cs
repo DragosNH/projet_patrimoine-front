@@ -182,4 +182,9 @@ public class SignUp : MonoBehaviour
     {
         SceneManager.LoadScene("ForgotPassword");
     }
+
+    public void TermsAndConditions()
+    {
+        SceneManager.LoadScene("TermsAndConditions");
+    }
 }

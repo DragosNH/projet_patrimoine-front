@@ -15,6 +15,8 @@ public class LoginPage : MonoBehaviour
     public GameObject popupMenu;
     public Toggle themeToggle;
     public PopupFader popupFader;
+    public Toggle rememberMeToggle;
+
 
     // -- Background images --
     // - Background-
@@ -47,6 +49,7 @@ public class LoginPage : MonoBehaviour
 
     // -- text colors --
     public TextMeshProUGUI[] texts;
+    public TextMeshProUGUI rememberMeLabel;
 
     // -- Url --
     string apiUrl = NetworkConfig.ServerIP + "/api/login/";
@@ -98,6 +101,7 @@ public class LoginPage : MonoBehaviour
         {
             txt.color = isDarkMode ? Color.white : Color.black;
         }
+        rememberMeLabel.color = isDarkMode ? Color.white : Color.black;
 
     }
 
@@ -145,9 +149,18 @@ public class LoginPage : MonoBehaviour
             // Parse the token response
             TokenResponse tokenResponse = JsonUtility.FromJson<TokenResponse>(request.downloadHandler.text);
 
-            // Save tokens locally
-            PlayerPrefs.SetString("access_token", tokenResponse.access);
-            PlayerPrefs.SetString("refresh_token", tokenResponse.refresh);
+            // Stayed logged in if the "Remember me" box is checked and save tokens locally
+            if (rememberMeToggle.isOn)
+            {
+                PlayerPrefs.SetString("access_token", tokenResponse.access);
+                PlayerPrefs.SetString("refresh_token", tokenResponse.refresh);
+            }
+            else
+            {
+                PlayerPrefs.SetString("access_token", tokenResponse.access);
+                PlayerPrefs.DeleteKey("refresh_token");
+            }
+
             PlayerPrefs.Save();
 
             // Load main page
