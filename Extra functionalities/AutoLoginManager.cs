@@ -10,7 +10,6 @@ public class AutoLoginManager : MonoBehaviour
     void Start()
     {
         StartCoroutine(CheckLoginStatus());
-        Debug.Log("-----------RunningAutoLoginManager script is running.");
     }
 
     IEnumerator CheckLoginStatus()
