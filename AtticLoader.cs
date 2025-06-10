@@ -2,6 +2,8 @@
 using UnityEngine.Networking;
 using System.Collections;
 using Newtonsoft.Json;
+using UnityEngine.SceneManagement;
+
 
 [System.Serializable]
 public class AtticData
@@ -23,6 +25,9 @@ public class AtticLoader : MonoBehaviour
 
     void Start()
     {
+        // Keep the screen on as long as this scene is running
+        Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
         StartCoroutine(FetchAndLoadAttic());
     }
 
@@ -75,8 +80,20 @@ public class AtticLoader : MonoBehaviour
         }
 
         GameObject attic = Instantiate(prefab);
-        attic.transform.position = new Vector3(0f, 0f, 2f);
+        // attic.transform.position = new Vector3(0f, 0f, 2f);
+        Transform cam = Camera.main.transform;
+        Vector3 spawnPosition = cam.position + (cam.forward * 1.5f) + new Vector3(0f, -0.5f, 0f);
+        attic.transform.position = spawnPosition;
+        attic.transform.rotation = Quaternion.LookRotation(-cam.forward);
+
+
 
         bundle.Unload(false);
     }
+
+    public void Return()
+    {
+        SceneManager.LoadScene("MainPage");
+    }
+    
 }
