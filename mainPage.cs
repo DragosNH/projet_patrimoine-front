@@ -145,7 +145,7 @@ public class MainPage: MonoBehaviour
     // ---- Go to the map ----
     public void MapScene()
     {
-        SceneManager.LoadScene("MapScene");
+        SceneManager.LoadScene("ARAtticScene");
     }
 
     // ---- logout button ----
