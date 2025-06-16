@@ -27,9 +27,11 @@ public class AtticLoader : MonoBehaviour
     XROrigin xrOrigin;
     [Header("UI Controls")]
     public Slider heightSlider;
+    public Slider rotationSlider;
 
     private GameObject atticInstance;
     private float manualYOffset = 0f;
+    private float manualRotation = 0f;
 
     string apiUrl = NetworkConfig.ServerIP + "/api/attic-skeleton/";
 
@@ -69,14 +71,9 @@ public class AtticLoader : MonoBehaviour
 
     void DisableSkybox()
     {
-        // 1) Remove any skybox material
         RenderSettings.skybox = null;
-
-        // 2) Make the AR camera only clear depth
         if (Camera.main != null)
             Camera.main.clearFlags = CameraClearFlags.Depth;
-
-        Debug.Log("Skybox disabled, clearFlags set to Depth");
     }
 
     // --------------------- Fetch the model and load it in AR ---------------------
@@ -135,6 +132,7 @@ public class AtticLoader : MonoBehaviour
 
         // Initial position
         manualYOffset = (heightSlider != null) ? heightSlider.value : 0f;
+        manualRotation = (rotationSlider != null) ? rotationSlider.value : 0f;
         UpdateAtticPosition();
 
         // Hook slider AFTER instance exists
@@ -142,6 +140,11 @@ public class AtticLoader : MonoBehaviour
         {
             heightSlider.onValueChanged.RemoveAllListeners();
             heightSlider.onValueChanged.AddListener(OnManualYOffsetChanged);
+        }
+        if (rotationSlider != null)
+        {
+            rotationSlider.onValueChanged.RemoveAllListeners();
+            rotationSlider.onValueChanged.AddListener(OnManualRotationChanged);
         }
 
         Debug.Log($"Instantiated attic at localPos {atticInstance.transform.localPosition}");
@@ -159,6 +162,13 @@ public class AtticLoader : MonoBehaviour
             Debug.Log($"------ Moved attic to localPos {atticInstance.transform.localPosition}");
         }
     }
+    public void OnManualRotationChanged(float newAngle)
+    {
+        manualRotation = newAngle;
+        Debug.Log($"Rotation slider fired: {manualRotation}");
+        if (atticInstance != null)
+            UpdateAtticPosition();
+    }
     // --------- Update position ---------
     private void UpdateAtticPosition()
     {
@@ -167,6 +177,8 @@ public class AtticLoader : MonoBehaviour
         forward.y = 0f;
         atticInstance.transform.localPosition = forward * 1.5f + Vector3.up * (0.5f + manualYOffset);
         atticInstance.transform.localRotation = Quaternion.LookRotation(-forward);
+        var baseRot = Quaternion.LookRotation(-forward);
+        atticInstance.transform.localRotation = baseRot * Quaternion.Euler(0f, manualRotation, 0f);
     }
 
     // --------------------- Return to main page ---------------------

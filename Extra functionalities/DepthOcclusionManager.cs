@@ -7,6 +7,9 @@ public class DepthOcclusionManager : MonoBehaviour
 {
     AROcclusionManager occlusionManager;
 
+    // WARNING! this code is inactive inside unity because the depth is not working so well on big objects like houses, maybe because the code is not strong enough or the Unity is not there yet, but this code is a good fondation for the future!
+
+
     void Awake()
     {
         Debug.Log("[DepthOcclusionManager] Awake");
